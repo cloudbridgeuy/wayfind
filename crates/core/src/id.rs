@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn numeric_ids_sort_by_their_integer_value() {
-        let mut ids = vec![
+        let mut ids = [
             TicketId::new(10).unwrap(),
             TicketId::new(2).unwrap(),
             TicketId::new(33).unwrap(),

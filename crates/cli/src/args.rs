@@ -415,10 +415,6 @@ pub struct ResolutionSource {
 }
 
 /// Where text is read from.
-///
-/// The dispatch that reads from one of these arrives with the shell itself;
-/// until then only this module's tests exercise it.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextSource {
     /// It was typed on the command line.
@@ -433,7 +429,6 @@ pub enum TextSource {
 pub const STDIN_PATH: &str = "-";
 
 /// Read a path as a source, treating `-` as standard input.
-#[allow(dead_code)]
 pub fn text_source(path: PathBuf) -> TextSource {
     if path.as_os_str() == STDIN_PATH {
         return TextSource::Stdin;
@@ -448,7 +443,6 @@ impl ResolutionSource {
     /// The remaining branch cannot be reached; it reads standard input, which
     /// is the harmless choice if a future edit to the group ever lets it
     /// through.
-    #[allow(dead_code)]
     pub fn source(&self) -> TextSource {
         if let Some(text) = &self.resolution {
             return TextSource::Inline(text.clone());

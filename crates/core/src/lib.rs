@@ -79,6 +79,7 @@ pub use storage::{
     EntityWriter, IdAllocator, IdScope, InitiativeRevision, InitiativeScope, InitiativeSelector,
     Storage, StorageError, StorageResult,
 };
+pub use time::Timestamp;
 pub use transition::{
     prepare_amend, prepare_claim, prepare_clear, prepare_dependency, prepare_resolution,
     AmendInput, ClaimInput, Decision as TransitionDecision, DependencyInput, ResolveInput,

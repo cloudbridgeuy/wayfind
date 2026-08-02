@@ -10,18 +10,13 @@
 //! there is a command to carry out is anything opened.
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
-mod args;
-mod config;
-mod error;
-
 use std::process::ExitCode;
 
 use clap::Parser;
+use wayfind_cli::args::Cli;
+use wayfind_cli::config::{self, ConfigContext};
+use wayfind_cli::error::{ShellError, ShellResult};
 use wayfind_core::StorageConfig;
-
-use crate::args::Cli;
-use crate::config::ConfigContext;
-use crate::error::{ShellError, ShellResult};
 
 fn main() -> ExitCode {
     // Clap prints help, version, and usage errors itself and exits, so nothing
@@ -40,9 +35,10 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> ShellResult<()> {
+    let overrides = cli.globals.config_source();
     let resolved = config::load_config(ConfigContext {
-        explicit_file: cli.globals.config.clone(),
-        cli: cli.globals.config_source(),
+        explicit_file: cli.globals.config,
+        cli: overrides,
     })?;
 
     // The storage and search adapters, and the dispatch that uses them, arrive
