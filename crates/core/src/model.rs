@@ -304,18 +304,92 @@ pub struct PersistedTicketState<'a> {
     pub live_claim: Option<PersistedClaim<'a>>,
 }
 
+/// A ticket's lifecycle position with the payload dropped.
+///
+/// The index views — the map frontier, the search results, the tree — print the
+/// status word and nothing else. Carrying a label instead of a whole
+/// [`TicketState`] keeps those reads from having to load a resolution or join a
+/// claim just to print one word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TicketStatusLabel {
+    /// Nobody holds it and it has no decision yet.
+    Open,
+    /// One session holds it.
+    Claimed,
+    /// It carries a settled decision.
+    Resolved,
+    /// Ruled out of the initiative without a decision.
+    Excluded,
+}
+
+impl TicketStatusLabel {
+    /// The operator-facing name of this value, used in errors.
+    pub const FIELD: &'static str = "ticket status";
+
+    /// The exact text this label is stored as.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TicketStatusLabel::Open => "open",
+            TicketStatusLabel::Claimed => "claimed",
+            TicketStatusLabel::Resolved => "resolved",
+            TicketStatusLabel::Excluded => "excluded",
+        }
+    }
+
+    /// Whether a ticket with this label still needs a decision.
+    pub fn is_unresolved(self) -> bool {
+        matches!(self, TicketStatusLabel::Open | TicketStatusLabel::Claimed)
+    }
+}
+
+impl FromStr for TicketStatusLabel {
+    type Err = Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        match text {
+            "open" => Ok(TicketStatusLabel::Open),
+            "claimed" => Ok(TicketStatusLabel::Claimed),
+            "resolved" => Ok(TicketStatusLabel::Resolved),
+            "excluded" => Ok(TicketStatusLabel::Excluded),
+            other => Err(Error::invalid_value(
+                Self::FIELD,
+                format!("expected one of open, claimed, resolved, excluded; got {other:?}"),
+            )),
+        }
+    }
+}
+
+impl fmt::Display for TicketStatusLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for TicketStatusLabel {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        text.parse().map_err(serde::de::Error::custom)
+    }
+}
+
 impl TicketState {
     /// The entity name used when a stored ticket turns out to be impossible.
     const ENTITY: &'static str = "ticket";
 
+    /// This state with its payload dropped.
+    pub fn label(&self) -> TicketStatusLabel {
+        match self {
+            TicketState::Open => TicketStatusLabel::Open,
+            TicketState::Claimed { .. } => TicketStatusLabel::Claimed,
+            TicketState::Resolved { .. } => TicketStatusLabel::Resolved,
+            TicketState::Excluded => TicketStatusLabel::Excluded,
+        }
+    }
+
     /// The exact text this state is stored as in `tickets.status`.
     pub fn as_status_str(&self) -> &'static str {
-        match self {
-            TicketState::Open => "open",
-            TicketState::Claimed { .. } => "claimed",
-            TicketState::Resolved { .. } => "resolved",
-            TicketState::Excluded => "excluded",
-        }
+        self.label().as_str()
     }
 
     /// Whether this ticket still needs a decision.
@@ -595,6 +669,15 @@ impl fmt::Display for InitiativeState {
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------
+
+/// One project: the directory Wayfind groups initiatives under.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Project {
+    /// The absolute physical path that names the project.
+    pub key: ProjectKey,
+    /// When the project first appeared.
+    pub created_at: Timestamp,
+}
 
 /// One initiative: a destination and the notes that frame it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
