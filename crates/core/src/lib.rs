@@ -77,7 +77,7 @@ pub use session::{
 pub use storage::{
     AllocatedId, AtomicWorkflows, AttachmentStore, CapacityLimit, Consistency, EntityReader,
     EntityWriter, IdAllocator, IdScope, InitiativeRevision, InitiativeScope, InitiativeSelector,
-    Storage, StorageError, StorageResult,
+    Storage, StorageError, StorageResult, MAX_BYTES_PER_WORKFLOW, MAX_ITEMS_PER_WORKFLOW,
 };
 pub use time::Timestamp;
 pub use transition::{

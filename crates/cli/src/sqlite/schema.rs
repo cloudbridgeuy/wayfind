@@ -111,11 +111,37 @@ CREATE TRIGGER IF NOT EXISTS tickets_au AFTER UPDATE OF title, question, resolut
 END;
 ";
 
+/// The two tables the adapter needs and the script never had.
+///
+/// Both are additive and both are namespaced, so a script that still opens the
+/// same file keeps working and cannot collide with a table of its own. Neither
+/// declares a foreign key on purpose: the script knows nothing about these rows,
+/// and a constraint would let one of them refuse a delete the script is entitled
+/// to make. A row left behind by such a delete is harmless — an identifier
+/// counter that never goes backwards, and a revision nobody asks about.
+pub const ADAPTER_SCHEMA: &str = "\
+CREATE TABLE IF NOT EXISTS wayfind_initiative_revisions (
+  initiative_id INTEGER PRIMARY KEY,
+  revision INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS wayfind_id_sequences (
+  scope TEXT PRIMARY KEY,
+  next_id INTEGER NOT NULL
+);
+";
+
 /// Create every table, index, and trigger that is not there yet.
 pub fn create_schema(connection: &Connection) -> StorageResult<()> {
     connection
         .execute_batch(SCHEMA)
         .map_err(|error| StorageError::infrastructure("create schema", error.to_string()))
+}
+
+/// Create the adapter's own two tables if they are not there yet.
+pub fn create_adapter_schema(connection: &Connection) -> StorageResult<()> {
+    connection
+        .execute_batch(ADAPTER_SCHEMA)
+        .map_err(|error| StorageError::infrastructure("create adapter schema", error.to_string()))
 }
 
 /// Switch a newly created database to write-ahead logging.
