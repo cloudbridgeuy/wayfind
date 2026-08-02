@@ -7,6 +7,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 pub mod command;
+pub mod config;
 pub mod error;
 pub mod format;
 pub mod graph;
@@ -27,6 +28,12 @@ pub use command::{
     ClaimTicket, ClearInitiative, CreateInitiative, CreateTicket, EnsureProject, InsertDependency,
     NonEmptyText, RemoveAttachmentReference, ResolutionText, ResolveTicket, StoreAttachment,
     TouchSession,
+};
+pub use config::{
+    resolve_config, ConfigInput, ConfigSource, RawConfig, RawReserved, RawSqlite, RawSqliteFts5,
+    ResolvedConfig, SearchConfig, SearchSelector, SqliteFts5Settings, SqliteSettings,
+    StorageConfig, StorageSelector, AVAILABLE_SEARCH_BACKENDS, AVAILABLE_STORAGE_BACKENDS,
+    DEFAULT_SEARCH_BACKEND, DEFAULT_SEARCH_TABLE, DEFAULT_STORAGE_BACKEND, RESERVED_BACKENDS,
 };
 pub use error::{Error, Result};
 pub use format::{
