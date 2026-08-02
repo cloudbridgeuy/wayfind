@@ -8,16 +8,19 @@
 
 pub mod command;
 pub mod error;
+pub mod format;
 pub mod graph;
 pub mod id;
 pub mod initiative;
 pub mod model;
 pub mod outcome;
+pub mod render;
 pub mod search;
 pub mod session;
 pub mod storage;
 pub mod time;
 pub mod transition;
+pub mod tree;
 
 pub use command::{
     AddAttachmentReference, AddFogNote, AddScopeExclusion, AmendTicket, AttachmentName,
@@ -26,6 +29,10 @@ pub use command::{
     TouchSession,
 };
 pub use error::{Error, Result};
+pub use format::{
+    clamp_gist, flatten_lines, format_size, strip_one_trailing_newline, toml_string, ELLIPSIS,
+    GIST_LIMIT,
+};
 pub use graph::{cycle_from, frontier, would_create_cycle, DependencyGraph};
 pub use id::{AttachmentId, DecisionId, InitiativeId, NoteId, ProjectKey, SessionId, TicketId};
 pub use initiative::{
@@ -44,6 +51,15 @@ pub use outcome::{
     RemoveAttachmentOutcome, ResolveConflict, ResolveOutcome, StaleRevision, TouchSessionConflict,
     TouchSessionOutcome,
 };
+pub use render::{
+    render_attachment_header, render_attachment_list, render_csv, render_handoff, render_init,
+    render_initiative_cleared, render_map, render_next_unavailable, render_search,
+    render_session_list, render_session_resume, render_ticket, state_guidance, AttachmentListView,
+    AttachmentRow, AttachmentView, DecisionRow, DumpRow, Field, FrontMatter, FrontierRow,
+    FullDecision, HandoffView, InitiativeHeader, MapView, NextView, OwnedAttachmentRow,
+    ReferencedAttachmentRow, SearchView, SessionListView, SessionResumeView, SessionRow,
+    TicketView, UnresolvedRow, DUMP_HEADER,
+};
 pub use search::{
     SearchBackend, SearchError, SearchHit, SearchLimit, SearchOffset, SearchPage, SearchQuery,
     SearchRequest, SearchResult,
@@ -60,3 +76,4 @@ pub use transition::{
     prepare_amend, prepare_claim, prepare_clear, prepare_dependency, prepare_resolution,
     AmendInput, ClaimInput, Decision as TransitionDecision, DependencyInput, ResolveInput,
 };
+pub use tree::{render_tree, TreeRow, TreeView};
