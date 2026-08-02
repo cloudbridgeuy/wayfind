@@ -20,8 +20,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::id::{SessionId, TicketId};
-use crate::model::{Project, Session, TicketStatusLabel};
+use crate::id::{InitiativeId, ProjectKey, SessionId, TicketId};
+use crate::model::{Session, TicketStatusLabel};
 use crate::storage::InitiativeRevision;
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,12 @@ pub enum InsertDependencyConflict {
         /// The ticket that is elsewhere.
         ticket_id: TicketId,
     },
-    /// The edge would make a ticket wait on itself, directly or through others.
+    /// The edge would make a ticket wait on itself directly.
+    SelfEdge {
+        /// The ticket named on both sides.
+        ticket_id: TicketId,
+    },
+    /// The edge would make a ticket wait on itself through others.
     WouldCloseCycle {
         /// The path that would close, from the waiting ticket back to itself.
         cycle: Vec<TicketId>,
@@ -268,11 +273,14 @@ pub enum ClearOutcome {
 /// Why a session cannot be recorded as alive.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TouchSessionConflict {
-    /// The session belongs to a different project. A session never moves
-    /// between projects; a new directory means a new session.
-    SessionBelongsToAnotherProject {
-        /// The project that actually owns it.
-        owner: Project,
+    /// The session is already bound to a different project or a different
+    /// initiative. A session never moves; a new place means a new session
+    /// identifier.
+    SessionBoundElsewhere {
+        /// The project the session is bound to.
+        owner_project: ProjectKey,
+        /// The initiative the session is bound to, if it has one.
+        owner_initiative: Option<InitiativeId>,
     },
 }
 
