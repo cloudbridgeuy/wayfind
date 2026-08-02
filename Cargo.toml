@@ -1,0 +1,77 @@
+[workspace]
+members = ["crates/core", "crates/cli", "xtask"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["Guzmán Monné"]
+rust-version = "1.95.0"
+publish = false
+
+[workspace.lints.clippy]
+# Note: unwrap_used and expect_used are enabled in lib.rs/main.rs via #![deny(...)]
+# rather than here, so test code can still use .unwrap() for brevity.
+# See crates/*/src/lib.rs and crates/*/src/main.rs for the denials.
+
+# Make Impossible States Impossible — force explicit variant names, no glob imports
+enum_glob_use = "deny"
+wildcard_imports = "deny"
+
+# Parse Don't Validate — cleaner early returns at boundaries
+manual_let_else = "warn"
+
+# Algebraic Data Types — catch enums with huge size disparity between variants
+large_enum_variant = "warn"
+
+# Clarity — make clones and copies visible and intentional
+implicit_clone = "warn"
+cloned_instead_of_copied = "warn"
+redundant_closure_for_method_calls = "warn"
+needless_pass_by_value = "warn"
+
+[profile.dev]
+# Disabling debug info speeds up builds.
+debug = 0
+
+[profile.release]
+incremental = true
+# Set this to 1 or 2 to get more useful backtraces in debugger.
+debug = 0
+
+[workspace.dependencies]
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# CLI
+clap = { version = "4.5", features = ["derive", "string", "env"] }
+
+# Error reporting in the binary
+color-eyre = "0.6"
+
+# CSV records for `dump --csv`
+csv = "1.3"
+
+# SQLite, statically bundled so the binary owns its FTS5 build.
+#
+# `rusqlite` 0.40 pulls `libsqlite3-sys` 0.38, whose build script uses
+# `cfg_select!`. That macro is unstable before Rust 1.94, which is why this
+# workspace pins a newer toolchain than the rest of the tool family.
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Temporary directories and files in tests and the shell
+tempfile = "3"
+
+# Structured error types in the libraries
+thiserror = "2"
+
+# Configuration files and front-matter serialization
+toml = "0.9"
+
+# Internal crates
+wayfind_core = { version = "0.1.0", path = "crates/core" }

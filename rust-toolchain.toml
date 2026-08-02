@@ -1,0 +1,6 @@
+[toolchain]
+# `rusqlite` 0.40 -> `libsqlite3-sys` 0.38 builds with `cfg_select!`, which is
+# unstable before Rust 1.94. Bundled SQLite with FTS5 is a settled constraint,
+# so the toolchain moves instead of the database dependency.
+channel = "1.95.0"
+components = ["clippy", "rustfmt"]
