@@ -1,0 +1,144 @@
+name: Release
+
+# One binary, four targets. Wayfind is a single command that carries its own
+# SQLite build, so a release is four files and a changelog — no image, no
+# registry, no installer.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # macOS Intel
+          - target: x86_64-apple-darwin
+            os: macos-15
+            asset_suffix: Darwin-x86_64
+
+          # macOS Apple Silicon
+          - target: aarch64-apple-darwin
+            os: macos-15
+            asset_suffix: Darwin-arm64
+
+          # Linux x86_64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset_suffix: Linux-x86_64
+
+          # Linux ARM64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset_suffix: Linux-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add the target to the pinned toolchain
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install the cross compiler (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        # SQLite is compiled from source into the binary, so the C cross
+        # compiler must be named for both the `cc` crate and the linker.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          {
+            echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc"
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc"
+          } >> "$GITHUB_ENV"
+
+      - name: Cache cargo registry and index
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Cache target directory
+        uses: actions/cache@v5
+        with:
+          path: target/
+          key: ${{ runner.os }}-${{ matrix.target }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-target-
+
+      - name: Build the binary
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin wayfind
+
+      - name: Name the asset
+        run: cp "target/${{ matrix.target }}/release/wayfind" "wayfind-${{ matrix.asset_suffix }}"
+
+      - name: Upload the asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.asset_suffix }}
+          path: wayfind-${{ matrix.asset_suffix }}
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [build-binaries]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download every asset
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Gather the assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -name "wayfind-*" -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Read the version from the tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Install git-cliff
+        uses: kenji-miyake/setup-git-cliff@v2
+
+      - name: Write the release notes
+        run: git cliff --latest --strip header > RELEASE_CHANGELOG.md
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body_path: RELEASE_CHANGELOG.md
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false

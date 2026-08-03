@@ -9,7 +9,9 @@ publish = false
 description = "Repository automation: lint, hooks, and release helpers"
 
 [dependencies]
+chrono.workspace = true
 clap.workspace = true
+color-eyre.workspace = true
 
 [lints]
 workspace = true

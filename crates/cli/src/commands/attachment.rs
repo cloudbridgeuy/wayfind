@@ -23,16 +23,38 @@ use crate::error::{ShellError, ShellResult};
 use crate::input;
 use crate::output::Output;
 
+/// What `wayfind attach add` was asked to file.
+///
+/// The five parts travel together because they describe one document. Passing
+/// them one at a time would make the call an unlabelled list of positions.
+#[derive(Debug, Clone, Copy)]
+pub struct AddAttachment<'a> {
+    /// The ticket the document belongs to.
+    pub ticket: i64,
+    /// Where the text comes from: an argument, a file, or standard input.
+    pub source: &'a TextSource,
+    /// What the document is for.
+    pub description: &'a str,
+    /// The name the operator chose, if they chose one.
+    pub chosen_name: Option<&'a str>,
+    /// Whether the source file is deleted once the store holds the document.
+    pub move_source: bool,
+}
+
 /// File a document against a ticket of the initiative in play.
 pub fn add(
     shell: &Shell<'_>,
-    ticket: i64,
-    source: &TextSource,
-    description: &str,
-    chosen_name: Option<&str>,
-    move_source: bool,
+    request: AddAttachment<'_>,
     output: &mut dyn Output,
 ) -> ShellResult<()> {
+    let AddAttachment {
+        ticket,
+        source,
+        description,
+        chosen_name,
+        move_source,
+    } = request;
+
     let ticket_id = TicketId::new(ticket)?;
     let name = AttachmentName::new(input::attachment_name(source, chosen_name)?)?;
 
@@ -102,7 +124,7 @@ pub fn add_reference(
         ticket_id,
         now: shell.now,
     })? {
-        ReferenceOutcome::Conflict(conflict) => Err(reference_refusal(conflict)),
+        ReferenceOutcome::Conflict(conflict) => Err(reference_refusal(&conflict)),
         _ => {
             let view = shell.view(view.id())?;
             let document = shell.ticket_document(&view, ticket_id)?;
@@ -127,7 +149,7 @@ pub fn remove_reference(
         attachment_id,
         ticket_id,
     })? {
-        ReferenceOutcome::Conflict(conflict) => Err(reference_refusal(conflict)),
+        ReferenceOutcome::Conflict(conflict) => Err(reference_refusal(&conflict)),
         _ => {
             let view = shell.view(view.id())?;
             let document = shell.ticket_document(&view, ticket_id)?;

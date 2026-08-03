@@ -11,7 +11,7 @@ use rusqlite::{Connection, OptionalExtension};
 use wayfind_core::{
     AddAttachmentReference, AttachmentId, AttachmentMetadata, AttachmentStore, CapacityLimit,
     ReferenceConflict, ReferenceOutcome, RemoveAttachmentOutcome, RemoveAttachmentReference,
-    StorageError, StorageResult, StoreAttachment, TicketId, MAX_BYTES_PER_WORKFLOW,
+    SessionId, StorageError, StorageResult, StoreAttachment, TicketId, MAX_BYTES_PER_WORKFLOW,
 };
 
 use super::write::initiative_of_ticket;
@@ -98,7 +98,7 @@ impl AttachmentStore for SqliteStorage {
                     command.description,
                     content,
                     byte_size,
-                    command.session_id.as_ref().map(|id| id.as_str()),
+                    command.session_id.as_ref().map(SessionId::as_str),
                     command.now.to_storage_string(),
                 ],
             )

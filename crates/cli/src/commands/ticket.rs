@@ -153,11 +153,11 @@ pub fn amend(
         },
         &view,
     )
-    .map_err(amend_refusal)?;
+    .map_err(|conflict| amend_refusal(&conflict))?;
 
     match shell.storage.amend_ticket(command)? {
         AmendOutcome::Amended => reread(shell, view.id(), ticket_id, output),
-        AmendOutcome::Conflict(conflict) => Err(amend_refusal(conflict)),
+        AmendOutcome::Conflict(conflict) => Err(amend_refusal(&conflict)),
     }
 }
 

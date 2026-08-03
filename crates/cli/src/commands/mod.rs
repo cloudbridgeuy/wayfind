@@ -470,7 +470,7 @@ pub fn resolve_refusal(conflict: ResolveConflict) -> ShellError {
 }
 
 /// Say why a recorded decision cannot be repaired.
-pub fn amend_refusal(conflict: AmendConflict) -> ShellError {
+pub fn amend_refusal(conflict: &AmendConflict) -> ShellError {
     ShellError::refused(match conflict {
         AmendConflict::NoSuchTicket { ticket_id }
         | AmendConflict::TicketOutsideInitiative { ticket_id } => {
@@ -479,7 +479,7 @@ pub fn amend_refusal(conflict: AmendConflict) -> ShellError {
         AmendConflict::NotResolved { ticket_id, .. } => {
             format!("ticket {ticket_id} is not resolved; amend repairs a recorded decision")
         }
-        AmendConflict::StaleRevision(revision) => stale(revision),
+        AmendConflict::StaleRevision(revision) => stale(*revision),
     })
 }
 
@@ -506,18 +506,18 @@ pub fn dependency_refusal(conflict: InsertDependencyConflict) -> ShellError {
 }
 
 /// Say why an initiative cannot be closed.
-pub fn clear_refusal(conflict: ClearConflict) -> ShellError {
+pub fn clear_refusal(conflict: &ClearConflict) -> ShellError {
     ShellError::refused(match conflict {
         ClearConflict::NoSuchInitiative => "no such initiative".to_owned(),
         ClearConflict::OpenTicketsRemain { outstanding } => {
             format!("{outstanding} ticket(s) are still unresolved")
         }
-        ClearConflict::StaleRevision(revision) => stale(revision),
+        ClearConflict::StaleRevision(revision) => stale(*revision),
     })
 }
 
 /// Say why a reference cannot be changed.
-pub fn reference_refusal(conflict: ReferenceConflict) -> ShellError {
+pub fn reference_refusal(conflict: &ReferenceConflict) -> ShellError {
     ShellError::refused(match conflict {
         ReferenceConflict::NoSuchAttachment => "no such attachment".to_owned(),
         ReferenceConflict::NoSuchTicket { ticket_id } => {

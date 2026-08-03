@@ -57,14 +57,14 @@ pub fn create(
 /// Close the initiative in play.
 pub fn clear(shell: &Shell<'_>, output: &mut dyn Output) -> ShellResult<()> {
     let view = shell.writable_view()?;
-    let command = prepare_clear(&view, shell.now).map_err(clear_refusal)?;
+    let command = prepare_clear(&view, shell.now).map_err(|conflict| clear_refusal(&conflict))?;
     match shell.storage.clear_initiative(command)? {
         // Closing something already closed changed nothing, and saying so twice
         // is what an idempotent command should do.
         ClearOutcome::Cleared | ClearOutcome::AlreadyClear => {
             output.text(&render_initiative_cleared(view.id()))
         }
-        ClearOutcome::Conflict(conflict) => Err(clear_refusal(conflict)),
+        ClearOutcome::Conflict(conflict) => Err(clear_refusal(&conflict)),
     }
 }
 

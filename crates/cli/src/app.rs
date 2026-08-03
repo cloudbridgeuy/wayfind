@@ -131,11 +131,13 @@ fn dispatch(
                 move_source,
             } => attachment::add(
                 shell,
-                ticket,
-                &text_source(file),
-                &description,
-                name.as_deref(),
-                move_source,
+                attachment::AddAttachment {
+                    ticket,
+                    source: &text_source(file),
+                    description: &description,
+                    chosen_name: name.as_deref(),
+                    move_source,
+                },
                 output,
             ),
             AttachCommand::Ref { ticket, attachment } => {

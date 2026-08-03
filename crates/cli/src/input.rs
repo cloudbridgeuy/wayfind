@@ -61,7 +61,7 @@ impl Content {
     }
 
     /// Accept bytes that arrived from a file or a pipe.
-    fn stored(bytes: Vec<u8>) -> ShellResult<Self> {
+    fn stored(bytes: &[u8]) -> ShellResult<Self> {
         if bytes.is_empty() {
             return Err(ShellError::refused("content is empty"));
         }
@@ -77,7 +77,7 @@ impl Content {
             ));
         }
         Ok(Self {
-            bytes: strip_one_trailing_newline(&bytes).to_vec(),
+            bytes: strip_one_trailing_newline(bytes).to_vec(),
         })
     }
 }
@@ -86,8 +86,8 @@ impl Content {
 pub fn read_content(environment: &dyn Environment, source: &TextSource) -> ShellResult<Content> {
     match source {
         TextSource::Inline(text) => Ok(Content::typed(text)),
-        TextSource::File(path) => Content::stored(environment.read_file(path)?),
-        TextSource::Stdin => Content::stored(environment.read_input()?),
+        TextSource::File(path) => Content::stored(&environment.read_file(path)?),
+        TextSource::Stdin => Content::stored(&environment.read_input()?),
     }
 }
 

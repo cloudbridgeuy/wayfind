@@ -485,15 +485,26 @@ fn a_ticket_outside_the_initiative_is_refused() {
 // Resolving
 // ---------------------------------------------------------------------------
 
+/// Which ticket of which initiative a resolution settles.
+#[derive(Debug, Clone, Copy)]
+struct Settle {
+    initiative_id: InitiativeId,
+    ticket_id: TicketId,
+}
+
 /// Resolve a ticket at whatever revision the initiative currently sits at.
 fn resolve(
     storage: &SqliteStorage,
-    initiative_id: InitiativeId,
-    ticket_id: TicketId,
+    settle: Settle,
     session_id: &SessionId,
     ticket_type: TicketType,
     resolution: &str,
 ) -> ResolveOutcome {
+    let Settle {
+        initiative_id,
+        ticket_id,
+    } = settle;
+
     let AllocatedId::Decision(decision_id) = storage.allocate(IdScope::Decision).expect("allocate")
     else {
         panic!("expected a decision id");
@@ -523,8 +534,10 @@ fn resolving_settles_the_ticket_frees_the_session_and_records_a_decision() {
     assert_eq!(
         resolve(
             &storage,
-            initiative_id,
-            ticket_id,
+            Settle {
+                initiative_id,
+                ticket_id
+            },
             &session_id,
             TicketType::Task,
             "SQLite stays.\nIt is one file and the script already used it.",
@@ -584,8 +597,10 @@ fn research_costs_a_session_nothing() {
     claim(&storage, initiative_id, first, &session_id);
     resolve(
         &storage,
-        initiative_id,
-        first,
+        Settle {
+            initiative_id,
+            ticket_id: first,
+        },
         &session_id,
         TicketType::Research,
         "Rusqlite bundles SQLite.",
@@ -594,8 +609,10 @@ fn research_costs_a_session_nothing() {
     assert_eq!(
         resolve(
             &storage,
-            initiative_id,
-            second,
+            Settle {
+                initiative_id,
+                ticket_id: second
+            },
             &session_id,
             TicketType::Research,
             "FTS5 is compiled in.",
@@ -620,8 +637,10 @@ fn a_session_gets_one_non_research_resolution_and_no_more() {
     claim(&storage, initiative_id, first, &session_id);
     resolve(
         &storage,
-        initiative_id,
-        first,
+        Settle {
+            initiative_id,
+            ticket_id: first,
+        },
         &session_id,
         TicketType::Task,
         "SQLite stays.",
@@ -647,8 +666,10 @@ fn only_the_session_holding_a_ticket_may_settle_it() {
     assert_eq!(
         resolve(
             &storage,
-            initiative_id,
-            ticket_id,
+            Settle {
+                initiative_id,
+                ticket_id
+            },
             &stranger,
             TicketType::Task,
             "Mine now.",
@@ -670,8 +691,10 @@ fn an_unclaimed_ticket_cannot_be_settled() {
     assert_eq!(
         resolve(
             &storage,
-            initiative_id,
-            ticket_id,
+            Settle {
+                initiative_id,
+                ticket_id
+            },
             &session_id,
             TicketType::Task,
             "Skipping the queue.",
@@ -694,8 +717,10 @@ fn a_settled_ticket_stays_settled() {
     claim(&storage, initiative_id, ticket_id, &session_id);
     resolve(
         &storage,
-        initiative_id,
-        ticket_id,
+        Settle {
+            initiative_id,
+            ticket_id,
+        },
         &session_id,
         TicketType::Research,
         "SQLite stays.",
@@ -704,8 +729,10 @@ fn a_settled_ticket_stays_settled() {
     assert_eq!(
         resolve(
             &storage,
-            initiative_id,
-            ticket_id,
+            Settle {
+                initiative_id,
+                ticket_id
+            },
             &session_id,
             TicketType::Research,
             "Actually, no.",
@@ -803,8 +830,10 @@ fn amending_repairs_both_the_recorded_text_and_its_gist() {
     claim(&storage, initiative_id, ticket_id, &session_id);
     resolve(
         &storage,
-        initiative_id,
-        ticket_id,
+        Settle {
+            initiative_id,
+            ticket_id,
+        },
         &session_id,
         TicketType::Research,
         "SQLightning stays.",
@@ -891,8 +920,10 @@ fn an_initiative_closes_only_once_no_work_is_outstanding() {
     claim(&storage, initiative_id, ticket_id, &session_id);
     resolve(
         &storage,
-        initiative_id,
-        ticket_id,
+        Settle {
+            initiative_id,
+            ticket_id,
+        },
         &session_id,
         TicketType::Research,
         "SQLite stays.",
