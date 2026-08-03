@@ -96,15 +96,21 @@ that directory itself when it is not in a checkout.
 
 ### Requirement: Choosing the session
 The **Session** is named by `--session`, else `WAYFIND_SESSION_ID`, else
-`CLAUDE_SESSION_ID`. A command that writes refuses without one.
+`CLAUDE_SESSION_ID`. Four commands act as a Session and refuse without one:
+`session resume`, `ticket claim`, `ticket resolve`, and `attach add`. Every
+other command, `ticket create` included, runs without a Session.
 
 #### Scenario: The flag wins
 - **WHEN** both the flag and the variables are set
 - **THEN** the flag is used, and `WAYFIND_SESSION_ID` beats `CLAUDE_SESSION_ID`
 
 #### Scenario: Nothing names a session
-- **WHEN** none is set and the command writes
+- **WHEN** none is set and the command acts as a Session
 - **THEN** the command refuses and says how to name one
+
+#### Scenario: A command that does not act as a session
+- **WHEN** `ticket create` runs with no Session named
+- **THEN** the Ticket is created, because it records no Session
 
 #### Scenario: A session stays where it started
 - **WHEN** a Session that appeared in one Initiative is used in another
