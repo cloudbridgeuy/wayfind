@@ -10,20 +10,25 @@
 //! there is a command to carry out is anything opened.
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+use std::io::{self, BufWriter};
 use std::process::ExitCode;
 
 use clap::Parser;
+use wayfind_cli::app;
 use wayfind_cli::args::Cli;
-use wayfind_cli::config::{self, ConfigContext};
-use wayfind_cli::error::{ShellError, ShellResult};
-use wayfind_core::StorageConfig;
+use wayfind_cli::context::SystemEnvironment;
 
 fn main() -> ExitCode {
     // Clap prints help, version, and usage errors itself and exits, so nothing
     // below runs for those.
     let cli = Cli::parse();
 
-    match run(cli) {
+    let environment = SystemEnvironment;
+    // A document is written a piece at a time, so buffering keeps one command to
+    // one write. `app::run` flushes before it returns.
+    let mut output = BufWriter::new(io::stdout().lock());
+
+    match app::run(cli, &environment, &mut output) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             // The same one-line shape the script used, so an agent or a wrapper
@@ -32,21 +37,4 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-fn run(cli: Cli) -> ShellResult<()> {
-    let overrides = cli.globals.config_source();
-    let resolved = config::load_config(ConfigContext {
-        explicit_file: cli.globals.config,
-        cli: overrides,
-    })?;
-
-    // The storage and search adapters, and the dispatch that uses them, arrive
-    // with the tasks that follow. Until then a command is parsed and resolved,
-    // and then refused outright rather than half carried out.
-    let StorageConfig::Sqlite(store) = &resolved.storage;
-    Err(ShellError::refused(format!(
-        "the sqlite backend at {} is not wired up yet",
-        store.database.display()
-    )))
 }

@@ -33,6 +33,37 @@ pub enum ShellError {
     #[error(transparent)]
     Domain(#[from] wayfind_core::Error),
 
+    /// The store could not answer.
+    #[error(transparent)]
+    Storage(#[from] wayfind_core::StorageError),
+
+    /// The search index could not answer.
+    #[error(transparent)]
+    Search(#[from] wayfind_core::SearchError),
+
+    /// A file the operator named could not be used.
+    ///
+    /// The path is carried separately because `std::io::Error` never holds one,
+    /// and "no such file" without a name is no help to anybody.
+    #[error("cannot {action} {path}: {source}")]
+    File {
+        /// What was being attempted.
+        action: &'static str,
+        /// The file it was attempted on.
+        path: PathBuf,
+        /// Why it failed.
+        source: std::io::Error,
+    },
+
+    /// Standard input or standard output failed.
+    #[error("cannot {action}: {source}")]
+    Stream {
+        /// What was being attempted.
+        action: &'static str,
+        /// Why it failed.
+        source: std::io::Error,
+    },
+
     /// The command was well formed and the data says no.
     #[error("{0}")]
     Refused(String),
@@ -42,6 +73,20 @@ impl ShellError {
     /// Refuse a command with a plain sentence.
     pub fn refused(message: impl Into<String>) -> Self {
         ShellError::Refused(message.into())
+    }
+
+    /// Report a failure against a named file.
+    pub fn file(action: &'static str, path: impl Into<PathBuf>, source: std::io::Error) -> Self {
+        ShellError::File {
+            action,
+            path: path.into(),
+            source,
+        }
+    }
+
+    /// Report a failure against a stream that has no name.
+    pub fn stream(action: &'static str, source: std::io::Error) -> Self {
+        ShellError::Stream { action, source }
     }
 }
 
