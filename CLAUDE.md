@@ -1,8 +1,7 @@
 # Wayfind — development guidance
 
 Wayfind is a small, agent-oriented issue tracker for long-running wayfinding
-work. This workspace is the Rust port of the original Bash script. It reads and
-writes the same SQLite database that the Bash script created.
+work.
 
 ## Architecture
 
@@ -85,9 +84,3 @@ cargo fmt -- --check
 cargo run -p xtask -- lint
 bash tests/smoke.sh target/debug/wayfind
 ```
-
-## Reference
-
-The behavioral reference is the Bash script at commit
-`0120d614c778e7e865f54ae2709e84f1d9b22d03` in the `Personal/scripts`
-repository. When behavior is unclear, read that script — it wins over prose.

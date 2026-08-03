@@ -208,36 +208,3 @@ target/debug/wayfind \
 
 `tests/smoke.sh` sets its own `XDG_CONFIG_HOME` for the same reason, so it never
 reads or writes the real file.
-
-## Compatibility with the Bash script
-
-Output is compared **semantically**, not byte for byte: front-matter key/value
-pairs, Markdown heading order, CSV records. Raw attachment bytes are the one
-exact comparison.
-
-Verified against a copy of the live database, `map`, `tree`, `handoff`,
-`sessions`, `next`, `search`, `ticket`, `attach list`, `attach show` and
-`attach show --raw` are byte-identical to the script. Three things differ on
-purpose:
-
-- **`dump --csv` header.** The script leaked its own SQL — `"replace(t.question,
-  char(10), ' ')"` — where the column name belongs. Wayfind writes `question`.
-  The records themselves are identical.
-- **Argument style.** Wayfind uses idiomatic Clap options where the script used
-  positions: `initiative create --name … --destination …`, `ticket block ID --by
-  N`, `attach ref TICKET --attachment N`, `fog add --note …`.
-- **Escaping.** TOML control characters and Markdown table pipes are escaped, so
-  a title holding either stays inside its own value and its own cell.
-
-The script can still read everything the port writes.
-
-## Non-goals
-
-- **Alternating or concurrent use of both implementations.** The port opens the
-  script's database so no data moves. It does not promise a parallel-run period,
-  forward compatibility for later script writes, or rollback safeguards.
-- **Byte-for-byte output parity.** See above.
-- **Bash-compatible help and argument errors.** Clap's are used instead.
-- **A DynamoDB backend.** The trait shape admits one; nothing implements it.
-- **Cutover.** How the built binary replaces the `~/.local/bin/wayfind` symlink
-  is undecided, and stays undecided until a separate decision selects it.

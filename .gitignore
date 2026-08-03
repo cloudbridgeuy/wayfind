@@ -6,11 +6,9 @@
 
 .DS_Store
 
-# Claude Code settings (keep plans and context docs only)
+# Claude Code settings (keep context docs only)
 .claude/*
 !.claude/context/
-!.claude/plans/
-!.claude/commands/
 
 # Build logs
 **/xtask-lint.log
