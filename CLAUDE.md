@@ -53,28 +53,27 @@ traits without SQL-shaped assumptions leaking into the core.
   directory rather than raising the cap; group parameters into a struct rather
   than allowing the lint.
 
-## Deliberate differences from the Bash script
+## Behavior
 
-Verified against a copy of the live database: `map`, `tree`, `handoff`,
-`sessions`, `next`, `search`, `ticket`, `attach list`, `attach show` and
-`attach show --raw` are byte-identical. Three things differ on purpose.
+`CONTEXT.md` holds the language and the relationships. What the system does
+lives in topic files, one requirement per behavior:
 
-- **`dump --csv` header.** The script leaked its own SQL —
-  `"replace(t.question, char(10), ' ')"` — where the column name belongs. The
-  port writes `question`. The records are identical.
-- **Argument style.** Idiomatic Clap options replace positions:
-  `initiative create --name … --destination …`, `ticket block ID --by N`,
-  `attach ref TICKET --attachment N`, `fog add --note …`,
-  `scope exclude --note …`.
-- **Escaping.** TOML control characters and Markdown table pipes are escaped.
+- [Initiatives](.claude/context/initiative.md) — charting, clearing, fog,
+  scope, and the map, tree, and handoff documents
+- [Tickets](.claude/context/ticket.md) — creating, claiming, resolving,
+  amending, dependencies, and the frontier
+- [Attachments](.claude/context/attachment.md) — filing, referencing, reading,
+  and deleting documents
+- [Search and export](.claude/context/query.md) — full-text search and CSV
+  records
+- [Configuration and storage](.claude/context/configuration.md) — the
+  configuration layers, project and session selection, and compatibility with
+  the Bash script's database
+- [Output shape](.claude/context/output.md) — the document contract, and the
+  three deliberate differences from the script
 
-Also narrower than the script: a document piped on standard input must carry
-`--name` (the script's basename-of-`-` branch was dead code), and
-`attachments.byte_size` records the stored length, one byte less than the
-script's for a newline-terminated file.
-
-Changing any of these needs an explicit decision and a focused compatibility
-test.
+Changing a deliberate difference needs an explicit decision and a focused
+compatibility test.
 
 ## Common commands
 
