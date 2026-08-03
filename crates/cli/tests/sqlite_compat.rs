@@ -15,9 +15,12 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 use tempfile::TempDir;
+use wayfind_cli::sqlite::search::SqliteFts5Search;
 use wayfind_cli::sqlite::{row, SqliteStorage};
 use wayfind_core::{
-    PersistedInitiativeStatus, SessionId, SessionState, TicketId, TicketState, TicketType,
+    InitiativeId, PersistedInitiativeStatus, SearchBackend, SearchError, SearchLimit, SearchOffset,
+    SearchPage, SearchQuery, SearchRequest, SessionId, SessionState, SqliteFts5Settings, TicketId,
+    TicketState, TicketType, DEFAULT_SEARCH_TABLE, FTS5_METADATA_NAMESPACE,
 };
 
 /// The script's schema and rows, as SQL.
@@ -265,6 +268,244 @@ fn deleting_a_ticket_removes_it_from_the_index() {
         "the delete trigger should have emptied the index row"
     );
     assert_eq!(broken_references(storage.connection()), 0);
+}
+
+// ---------------------------------------------------------------------------
+// The search backend
+// ---------------------------------------------------------------------------
+
+/// Open the index the resolved configuration would name.
+fn index(path: &Path) -> SqliteFts5Search {
+    SqliteFts5Search::open(&SqliteFts5Settings {
+        database: path.to_path_buf(),
+        table: DEFAULT_SEARCH_TABLE.to_owned(),
+    })
+    .expect("open the search index")
+}
+
+/// Ask one question at the default page size.
+fn ask(backend: &SqliteFts5Search, query: &str, initiative: i64) -> SearchPage {
+    let request = SearchRequest::first_page(
+        SearchQuery::new(query).expect("a usable query"),
+        InitiativeId::new(initiative).expect("a usable initiative"),
+    );
+    backend.search(&request).expect("run the search")
+}
+
+/// The ticket identifiers of a page, in the order the page holds them.
+fn ids(page: &SearchPage) -> Vec<i64> {
+    page.hits.iter().map(|hit| hit.ticket_id.get()).collect()
+}
+
+/// Write a ticket the way the script does, leaving the triggers to index it.
+fn add_ticket(connection: &Connection, id: i64, initiative: i64, title: &str, question: &str) {
+    connection
+        .execute(
+            "INSERT INTO tickets(id, initiative_id, title, type, status, question, created_at) \
+             VALUES (?1, ?2, ?3, 'task', 'open', ?4, '2026-07-03 09:00:00');",
+            rusqlite::params![id, initiative, title, question],
+        )
+        .expect("write the ticket");
+}
+
+/// A second initiative in the same project, so scoping has something to exclude.
+fn add_initiative(connection: &Connection, id: i64, name: &str) {
+    connection
+        .execute(
+            "INSERT INTO initiatives(id, project_key, name, destination, notes, status, \
+                                     created_at) \
+             VALUES (?1, '/Users/operator/Projects/wayfind', ?2, 'Somewhere else.', '', \
+                     'working', '2026-07-03 08:00:00');",
+            rusqlite::params![id, name],
+        )
+        .expect("write the initiative");
+}
+
+#[test]
+fn a_search_answers_with_the_ticket_its_status_and_a_marked_snippet() {
+    let (_directory, path) = fixture();
+    // The snippet is cut from the question, which is the column the script
+    // named and the only one worth quoting back: a title is already printed in
+    // full beside it.
+    let page = ask(&index(&path), "store", 1);
+    assert_eq!(ids(&page), vec![1]);
+    let hit = &page.hits[0];
+    assert_eq!(hit.title, "Choose the storage backend");
+    assert_eq!(hit.status.as_str(), "resolved");
+    assert!(
+        hit.snippet.contains("**store**"),
+        "the snippet should mark the match, got: {}",
+        hit.snippet
+    );
+    assert!(!page.has_more, "one hit does not fill the default page");
+}
+
+#[test]
+fn a_search_never_crosses_into_another_initiative() {
+    let (_directory, path) = fixture();
+    let storage = SqliteStorage::open(&path).expect("open the fixture");
+    add_initiative(storage.connection(), 2, "Port the completions");
+    add_ticket(
+        storage.connection(),
+        6,
+        2,
+        "Choose the storage backend",
+        "Which store keeps the completions?",
+    );
+
+    let backend = index(&path);
+    assert_eq!(
+        ids(&ask(&backend, "storage", 1)),
+        vec![1],
+        "the first initiative sees only its own ticket"
+    );
+    assert_eq!(
+        ids(&ask(&backend, "storage", 2)),
+        vec![6],
+        "the second initiative sees only its own ticket"
+    );
+}
+
+#[test]
+fn a_ticket_written_a_moment_ago_is_already_searchable() {
+    let (_directory, path) = fixture();
+    let storage = SqliteStorage::open(&path).expect("open the fixture");
+    let backend = index(&path);
+
+    assert!(
+        ask(&backend, "kerning", 1).hits.is_empty(),
+        "nothing mentions kerning yet"
+    );
+    add_ticket(
+        storage.connection(),
+        7,
+        1,
+        "Set the kerning of the banner",
+        "How tight should the letters sit?",
+    );
+    assert_eq!(
+        ids(&ask(&backend, "kerning", 1)),
+        vec![7],
+        "the insert trigger indexes the ticket as it is written, and the index \
+         connection sees the committed row at once"
+    );
+}
+
+#[test]
+fn a_page_holds_what_was_asked_for_and_says_when_there_is_more() {
+    let (_directory, path) = fixture();
+    let backend = index(&path);
+    let request = SearchRequest {
+        query: SearchQuery::new("the").expect("a usable query"),
+        initiative_id: InitiativeId::new(1).expect("a usable initiative"),
+        limit: SearchLimit::new(2).expect("a usable limit"),
+        offset: SearchOffset::START,
+    };
+    let page = backend.search(&request).expect("run the search");
+    assert_eq!(
+        page.hits.len(),
+        2,
+        "the page is the size that was asked for"
+    );
+    assert!(page.has_more, "more than two tickets say `the`");
+    assert_eq!(
+        page.next_request().map(|next| next.offset.get()),
+        Some(2),
+        "the next page starts where this one stopped"
+    );
+}
+
+#[test]
+fn paging_walks_the_whole_result_set_once() {
+    let (_directory, path) = fixture();
+    let backend = index(&path);
+    let whole = ids(&ask(&backend, "the", 1));
+    assert!(whole.len() > 2, "the fixture should give several hits");
+
+    let mut walked = Vec::new();
+    let mut request = Some(SearchRequest {
+        query: SearchQuery::new("the").expect("a usable query"),
+        initiative_id: InitiativeId::new(1).expect("a usable initiative"),
+        limit: SearchLimit::new(1).expect("a usable limit"),
+        offset: SearchOffset::START,
+    });
+    while let Some(current) = request {
+        let page = backend.search(&current).expect("run the search");
+        walked.extend(ids(&page));
+        request = page.next_request();
+    }
+    assert_eq!(
+        walked, whole,
+        "paging one at a time visits every hit exactly once, in the same order"
+    );
+}
+
+#[test]
+fn hits_that_score_the_same_come_back_by_ascending_ticket_id() {
+    let (_directory, path) = fixture();
+    let storage = SqliteStorage::open(&path).expect("open the fixture");
+    // The same question in both, and titles of the same token count that share
+    // no word with the query. Nothing is left for the ranking to tell apart, so
+    // only the tie-breaker decides. The higher identifier is written first, so
+    // insertion order cannot be mistaken for the answer.
+    add_ticket(
+        storage.connection(),
+        11,
+        1,
+        "Bravo placeholder title",
+        "The zzqq token appears here.",
+    );
+    add_ticket(
+        storage.connection(),
+        10,
+        1,
+        "Alpha placeholder title",
+        "The zzqq token appears here.",
+    );
+
+    let page = ask(&index(&path), "zzqq", 1);
+    assert_eq!(ids(&page), vec![10, 11]);
+    let ranks = page
+        .hits
+        .iter()
+        .map(|hit| hit.metadata.get("fts5.rank").cloned())
+        .collect::<Vec<_>>();
+    assert_eq!(ranks[0], ranks[1], "the two hits should score the same");
+}
+
+#[test]
+fn the_backend_score_is_reported_only_under_its_own_namespace() {
+    let (_directory, path) = fixture();
+    let page = ask(&index(&path), "storage", 1);
+    let keys = page.hits[0].metadata.keys().cloned().collect::<Vec<_>>();
+    assert_eq!(keys, vec![format!("{FTS5_METADATA_NAMESPACE}.rank")]);
+    assert!(
+        page.hits[0].metadata["fts5.rank"].is_number(),
+        "the score should be a number"
+    );
+}
+
+#[test]
+fn a_query_fts5_cannot_parse_is_reported_as_a_query_problem() {
+    let (_directory, path) = fixture();
+    let backend = index(&path);
+    let request = SearchRequest::first_page(
+        SearchQuery::new("AND").expect("a non-empty query"),
+        InitiativeId::new(1).expect("a usable initiative"),
+    );
+    let error = backend.search(&request).expect_err("FTS5 refuses this");
+    assert!(
+        matches!(error, SearchError::InvalidQuery { .. }),
+        "a syntax complaint is the operator's problem, not the disk's, got: {error}"
+    );
+}
+
+#[test]
+fn a_query_that_matches_nothing_is_an_empty_page_and_not_an_error() {
+    let (_directory, path) = fixture();
+    let page = ask(&index(&path), "vermilion", 1);
+    assert!(page.hits.is_empty());
+    assert!(!page.has_more);
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ pub mod attachment;
 pub mod read;
 pub mod row;
 pub mod schema;
+pub mod search;
 pub mod write;
 
 use std::path::Path;

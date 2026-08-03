@@ -69,7 +69,7 @@ pub use render::{
 };
 pub use search::{
     SearchBackend, SearchError, SearchHit, SearchLimit, SearchOffset, SearchPage, SearchQuery,
-    SearchRequest, SearchResult,
+    SearchRequest, SearchResult, FTS5_METADATA_NAMESPACE,
 };
 pub use session::{
     active_sessions, prepare_touch_session, session_of, session_state, SessionBudget, TouchInput,
