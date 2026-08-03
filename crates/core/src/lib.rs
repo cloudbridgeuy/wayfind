@@ -7,6 +7,8 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 pub mod command;
+#[cfg(test)]
+mod compat_tests;
 pub mod config;
 pub mod error;
 pub mod format;
