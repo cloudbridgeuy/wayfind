@@ -5,3 +5,6 @@
 //! table, not about how many files are on disk.
 
 pub mod schema;
+pub mod store;
+
+pub use store::SqliteStore;
