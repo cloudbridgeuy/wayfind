@@ -12,5 +12,6 @@
 pub mod config;
 pub mod error;
 pub mod id;
+pub mod kinds;
 pub mod render;
 pub mod time;
