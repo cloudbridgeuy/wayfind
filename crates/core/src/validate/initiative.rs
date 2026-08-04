@@ -27,8 +27,9 @@ pub struct PreparedRootSnapshot {
 
 /// A `CreateInitiativeCommand` that has been checked and fully hashed.
 ///
-/// The `_sealed` field is private, so this struct is constructible only from
-/// within this module — an unvalidated write must be unspellable.
+/// `#[non_exhaustive]` keeps a downstream crate from spelling a struct
+/// literal — an unvalidated write must come from [`validate_create`].
+#[non_exhaustive]
 pub struct ValidatedInitiative {
     pub project: ProjectKey,
     pub name: String,
@@ -36,7 +37,6 @@ pub struct ValidatedInitiative {
     pub notes: Option<String>,
     pub destination_node: Prepared<NodeDraft>,
     pub snapshot: PreparedRootSnapshot,
-    _sealed: (),
 }
 
 /// Check and fully hash a `CreateInitiativeCommand`.
@@ -73,7 +73,6 @@ pub fn validate_create(cmd: CreateInitiativeCommand) -> Result<ValidatedInitiati
             chain_hash,
             created_at: cmd.now,
         },
-        _sealed: (),
     })
 }
 
