@@ -7,6 +7,7 @@
 //! Every statement is `IF NOT EXISTS`, so running this against a database that
 //! already has the schema changes nothing.
 
+pub mod coordination;
 pub mod graph;
 
 use std::fmt::Write as _;
@@ -14,8 +15,12 @@ use std::fmt::Write as _;
 use rusqlite::Connection;
 
 /// Create every table the store needs, and guard the ones that never change.
+///
+/// The graph comes first: the coordination tables point at `projects` and
+/// `initiatives`, so those have to exist before a foreign key can name them.
 pub fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(graph::DDL)?;
+    connection.execute_batch(coordination::DDL)?;
     connection.execute_batch(&guard_triggers())
 }
 
