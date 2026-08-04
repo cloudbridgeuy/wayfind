@@ -6,6 +6,9 @@
 //! links against them rather than only by running the binary.
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+pub mod app;
+pub mod args;
+pub mod commands;
 pub mod config;
 pub mod context;
 pub mod error;
