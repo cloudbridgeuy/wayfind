@@ -9,12 +9,15 @@
 //! effect and decides nothing. This crate holds every rule and touches nothing.
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+pub mod command;
 pub mod config;
 pub mod encode;
 pub mod error;
 pub mod id;
 pub mod kinds;
+pub mod outcome;
 pub mod record;
 pub mod render;
 pub mod storage;
 pub mod time;
+pub mod validate;
