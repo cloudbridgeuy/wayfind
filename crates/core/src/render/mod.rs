@@ -4,6 +4,7 @@
 //! reads no clock, opens no file, and cannot fail. That is what makes the
 //! output contract testable without a store behind it.
 
+pub mod error;
 pub mod format;
 pub mod front_matter;
 
