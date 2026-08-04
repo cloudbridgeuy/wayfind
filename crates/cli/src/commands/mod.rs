@@ -11,6 +11,7 @@
 
 pub mod init;
 pub mod initiative;
+pub mod retired;
 
 use std::path::PathBuf;
 
