@@ -7,5 +7,6 @@
 pub mod error;
 pub mod format;
 pub mod front_matter;
+pub mod initiative;
 
 pub use front_matter::{Field, FrontMatter};
