@@ -10,3 +10,4 @@ pub mod config;
 pub mod context;
 pub mod error;
 pub mod output;
+pub mod sqlite;
