@@ -66,3 +66,62 @@ pub(crate) fn write_field_opt(buf: &mut Vec<u8>, name: &str, value: Option<&[u8]
         write_field(buf, name, value);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::{hash_bytes, node::encode_node};
+    use crate::id::SessionId;
+    use crate::kinds::NodeKind;
+    use crate::record::NodeDraft;
+    use crate::time::Timestamp;
+
+    fn draft() -> NodeDraft {
+        NodeDraft {
+            node_kind: NodeKind::Destination,
+            title: "T".into(),
+            summary: None,
+            content: "C".into(),
+            created_at: Timestamp::parse_rfc3339("2026-08-03T00:00:00Z").unwrap(),
+            created_by: SessionId::new("s").unwrap(),
+        }
+    }
+
+    #[test]
+    fn encoding_is_deterministic() {
+        let a = encode_node(&draft());
+        let b = encode_node(&draft());
+        assert_eq!(a.as_slice(), b.as_slice());
+    }
+
+    #[test]
+    fn a_different_created_at_changes_the_hash() {
+        let mut other = draft();
+        other.created_at = Timestamp::parse_rfc3339("2026-08-03T00:00:01Z").unwrap();
+        assert_ne!(
+            hash_bytes(encode_node(&draft()).as_slice()),
+            hash_bytes(encode_node(&other).as_slice())
+        );
+    }
+
+    #[test]
+    fn a_different_created_by_changes_the_hash() {
+        let mut other = draft();
+        other.created_by = SessionId::new("other").unwrap();
+        assert_ne!(
+            hash_bytes(encode_node(&draft()).as_slice()),
+            hash_bytes(encode_node(&other).as_slice())
+        );
+    }
+
+    #[test]
+    fn absent_and_empty_optional_differ() {
+        let mut empty = draft();
+        empty.summary = Some(String::new());
+        assert_ne!(
+            hash_bytes(encode_node(&draft()).as_slice()),
+            hash_bytes(encode_node(&empty).as_slice())
+        );
+    }
+}
