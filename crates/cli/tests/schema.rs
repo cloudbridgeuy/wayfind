@@ -15,25 +15,29 @@ fn count_object(conn: &rusqlite::Connection, kind: &str, name: &str) -> i64 {
     .unwrap()
 }
 
+/// The immutable tables, spelled out rather than read from the crate, so the
+/// test fails if a table is dropped from the list the DDL is generated from.
+const IMMUTABLE_TABLES: [&str; 13] = [
+    "projects",
+    "initiatives",
+    "result_nodes",
+    "transitions",
+    "transition_inputs",
+    "transition_outputs",
+    "connections",
+    "artifacts",
+    "artifact_references",
+    "import_provenance",
+    "import_members",
+    "snapshots",
+    "root_members",
+];
+
 #[test]
 fn creates_every_immutable_table() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     wayfind_cli::sqlite::schema::create(&conn).unwrap();
-    for table in [
-        "projects",
-        "initiatives",
-        "result_nodes",
-        "transitions",
-        "transition_inputs",
-        "transition_outputs",
-        "connections",
-        "artifacts",
-        "artifact_references",
-        "import_provenance",
-        "import_members",
-        "snapshots",
-        "root_members",
-    ] {
+    for table in IMMUTABLE_TABLES {
         assert_eq!(
             count_object(&conn, "table", table),
             1,
@@ -72,6 +76,64 @@ fn one_name_can_be_used_once_per_project() {
                   values (?1, '/work/repo', 'the name', 'somewhere', '2026-08-03T00:00:00Z')";
     conn.execute(insert, [1]).unwrap();
     assert!(conn.execute(insert, [2]).is_err());
+}
+
+#[test]
+fn every_immutable_table_carries_both_guard_triggers() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    wayfind_cli::sqlite::schema::create(&conn).unwrap();
+    for table in IMMUTABLE_TABLES {
+        for event in ["update", "delete"] {
+            let name = format!("guard_{table}_{event}");
+            assert_eq!(count_object(&conn, "trigger", &name), 1, "missing {name}");
+        }
+    }
+}
+
+#[test]
+fn immutable_tables_refuse_update_and_delete() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    wayfind_cli::sqlite::schema::create(&conn).unwrap();
+
+    // Foreign keys stay off here: the point is that the guard fires on a row
+    // that is already in the table, not that the row is a sensible record.
+    for table in IMMUTABLE_TABLES {
+        let columns = columns_of(&conn, table);
+        let names = columns.join(", ");
+        let values = vec!["'1'"; columns.len()].join(", ");
+        conn.execute(
+            &format!("insert into {table} ({names}) values ({values})"),
+            [],
+        )
+        .unwrap_or_else(|error| panic!("cannot seed {table}: {error}"));
+
+        let first = &columns[0];
+        let update = conn.execute(&format!("update {table} set {first} = '2'"), []);
+        assert!(update.is_err(), "{table} accepted an update");
+        assert!(
+            update.unwrap_err().to_string().contains("immutable"),
+            "{table} refused an update without saying why"
+        );
+
+        let delete = conn.execute(&format!("delete from {table}"), []);
+        assert!(delete.is_err(), "{table} accepted a delete");
+        assert!(
+            delete.unwrap_err().to_string().contains("immutable"),
+            "{table} refused a delete without saying why"
+        );
+    }
+}
+
+fn columns_of(conn: &rusqlite::Connection, table: &str) -> Vec<String> {
+    let mut statement = conn
+        .prepare(&format!("pragma table_info({table})"))
+        .unwrap();
+    let mut rows = statement.query([]).unwrap();
+    let mut names = Vec::new();
+    while let Some(row) = rows.next().unwrap() {
+        names.push(row.get::<_, String>(1).unwrap());
+    }
+    names
 }
 
 fn has_column(conn: &rusqlite::Connection, table: &str, column: &str) -> bool {
