@@ -220,6 +220,66 @@ fn a_ticket_link_does_not_point_its_node_at_the_graph() {
     }
 }
 
+#[test]
+fn a_new_result_node_reaches_the_search_index() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    wayfind_cli::sqlite::schema::create(&conn).unwrap();
+    conn.execute(
+        "insert into result_nodes \
+         (hash, node_kind, title, summary, content, created_at, created_by) \
+         values ('abc', 'result', 'a title', 'a summary', 'the content', \
+         '2026-08-03T00:00:00Z', 'a session')",
+        [],
+    )
+    .unwrap();
+    let indexed: i64 = conn
+        .query_row(
+            "select count(*) from search_index where kind = 'node'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(indexed, 1);
+}
+
+#[test]
+fn a_changed_ticket_is_indexed_once_with_its_new_words() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    wayfind_cli::sqlite::schema::create(&conn).unwrap();
+    conn.pragma_update(None, "foreign_keys", false).unwrap();
+    conn.execute(
+        "insert into tickets \
+         (id, project_key, title, description, priority, status, created_at, updated_at) \
+         values (1, '/work/repo', 'a title', 'the first words', 'normal', 'open', \
+         '2026-08-03T00:00:00Z', '2026-08-03T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "update tickets set description = 'the second words' where id = 1",
+        [],
+    )
+    .unwrap();
+
+    let rows: i64 = conn
+        .query_row(
+            "select count(*) from search_index where kind = 'ticket' and ref = '1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(rows, 1, "the update left a stale row behind");
+
+    let hits: i64 = conn
+        .query_row(
+            "select count(*) from search_index where search_index match 'second'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(hits, 1);
+}
+
 fn columns_of(conn: &rusqlite::Connection, table: &str) -> Vec<String> {
     let mut statement = conn
         .prepare(&format!("pragma table_info({table})"))

@@ -9,6 +9,7 @@
 
 pub mod coordination;
 pub mod graph;
+pub mod search;
 
 use std::fmt::Write as _;
 
@@ -21,6 +22,7 @@ use rusqlite::Connection;
 pub fn create(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch(graph::DDL)?;
     connection.execute_batch(coordination::DDL)?;
+    connection.execute_batch(search::DDL)?;
     connection.execute_batch(&guard_triggers())
 }
 
