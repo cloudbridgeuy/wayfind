@@ -992,7 +992,11 @@ fn a_cleared_initiative_is_no_longer_the_newest_but_is_still_readable() {
 
 const DOCUMENT: &[u8] = b"# Backends\n\nSQLite is one file.\n";
 
-fn attach(storage: &SqliteStorage, ticket_id: TicketId, name: &str) -> wayfind_v1_core::AttachmentId {
+fn attach(
+    storage: &SqliteStorage,
+    ticket_id: TicketId,
+    name: &str,
+) -> wayfind_v1_core::AttachmentId {
     let AllocatedId::Attachment(id) = storage.allocate(IdScope::Attachment).expect("allocate")
     else {
         panic!("expected an attachment id");

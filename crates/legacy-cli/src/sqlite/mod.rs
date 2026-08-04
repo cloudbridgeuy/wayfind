@@ -20,7 +20,9 @@ pub mod write;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
-use wayfind_v1_core::{InitiativeId, InitiativeRevision, StaleRevision, StorageError, StorageResult};
+use wayfind_v1_core::{
+    InitiativeId, InitiativeRevision, StaleRevision, StorageError, StorageResult,
+};
 
 /// An open connection to a wayfind database.
 #[derive(Debug)]
