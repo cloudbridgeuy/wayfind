@@ -1,13 +1,14 @@
 //! What the shell reports when a command cannot be carried out.
 //!
-//! The Bash script printed `wayfind: <message>` on standard error and exited 1,
-//! whatever went wrong. Scripts and agents read that line, so this keeps the
-//! same shape. Every error the shell can produce reduces to one line of prose,
-//! and the variant only records where it came from.
+//! v2 answers a refused command with an error document, not a bare line: the
+//! caller reads a token and an exit code. Everything the shell can go wrong at
+//! therefore reduces to a [`Rejection`] or to a fault it could not have
+//! predicted, and the variant records only which of the two it was.
 
 use std::path::PathBuf;
 
 use thiserror::Error;
+use wayfind_core::error::Rejection;
 
 /// Everything the shell can refuse to do.
 #[derive(Debug, Error)]
@@ -29,17 +30,16 @@ pub enum ShellError {
     )]
     NoConfigHome,
 
-    /// A value did not survive the core's checks.
-    #[error(transparent)]
-    Domain(#[from] wayfind_core::Error),
+    /// The command was well formed and the domain says no.
+    ///
+    /// This is the one variant with a contract: it carries the token the caller
+    /// matches on and the exit code the command ends with.
+    #[error("{}", .0.token().as_token())]
+    Rejected(Rejection),
 
     /// The store could not answer.
     #[error(transparent)]
-    Storage(#[from] wayfind_core::StorageError),
-
-    /// The search index could not answer.
-    #[error(transparent)]
-    Search(#[from] wayfind_core::SearchError),
+    Storage(#[from] rusqlite::Error),
 
     /// A file the operator named could not be used.
     ///
@@ -63,18 +63,9 @@ pub enum ShellError {
         /// Why it failed.
         source: std::io::Error,
     },
-
-    /// The command was well formed and the data says no.
-    #[error("{0}")]
-    Refused(String),
 }
 
 impl ShellError {
-    /// Refuse a command with a plain sentence.
-    pub fn refused(message: impl Into<String>) -> Self {
-        ShellError::Refused(message.into())
-    }
-
     /// Report a failure against a named file.
     pub fn file(action: &'static str, path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         ShellError::File {
@@ -87,6 +78,23 @@ impl ShellError {
     /// Report a failure against a stream that has no name.
     pub fn stream(action: &'static str, source: std::io::Error) -> Self {
         ShellError::Stream { action, source }
+    }
+
+    /// The rejection this error prints, when it has one.
+    ///
+    /// Anything else is an internal fault: exit code 1, no token, because it is
+    /// not a refusal the operator can answer.
+    pub fn rejection(&self) -> Option<&Rejection> {
+        match self {
+            ShellError::Rejected(rejection) => Some(rejection),
+            _ => None,
+        }
+    }
+}
+
+impl From<Rejection> for ShellError {
+    fn from(rejection: Rejection) -> Self {
+        ShellError::Rejected(rejection)
     }
 }
 

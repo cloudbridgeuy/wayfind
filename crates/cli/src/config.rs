@@ -2,9 +2,8 @@
 //!
 //! There is no decision here. This module reads a file, reads the environment,
 //! and works out where the default database lives; every one of those is an
-//! effect, and none of them is tested. What the layers *mean* — which wins,
-//! which is required, which backend they select — is decided by
-//! [`wayfind_core::resolve_config`], which touches nothing.
+//! effect, and none of them is tested. What the layers *mean* is decided by
+//! [`wayfind_core::config::resolve_config`], which touches nothing.
 //!
 //! Paths are used exactly as they were given. A `~` or a `$VAR` inside a
 //! configured path is not expanded: the shell that invoked Wayfind already does
@@ -13,18 +12,21 @@
 
 use std::path::{Path, PathBuf};
 
-use wayfind_core::{ConfigInput, ConfigSource, RawConfig, ResolvedConfig};
+use wayfind_core::config::{resolve_config, ConfigInput, ConfigSource, RawConfig, ResolvedConfig};
 
 use crate::error::{ShellError, ShellResult};
 
 /// The directory Wayfind keeps its files in, under the configuration home.
+///
+/// v2 shares this directory with v1. The two stores are separate files inside
+/// it, so an operator who runs both keeps one place to look.
 pub const APP_DIRECTORY: &str = "wayfind";
 
 /// The configuration file's name.
-pub const CONFIG_FILE: &str = "config.toml";
+pub const CONFIG_FILE: &str = "config.v2.toml";
 
 /// The database file's name.
-pub const DATABASE_FILE: &str = "wayfind.sqlite";
+pub const DATABASE_FILE: &str = "wayfind2.sqlite";
 
 /// The prefix every Wayfind environment variable carries.
 pub const ENV_PREFIX: &str = "WAYFIND_";
@@ -33,7 +35,7 @@ pub const ENV_PREFIX: &str = "WAYFIND_";
 pub struct ConfigContext {
     /// A configuration file named on the command line, if there was one.
     pub explicit_file: Option<PathBuf>,
-    /// What the command line said about backends.
+    /// What the command line said about paths.
     pub cli: ConfigSource,
 }
 
@@ -43,7 +45,7 @@ pub struct ConfigContext {
 /// default one may be missing — a fresh machine has no configuration and still
 /// runs — but a default file that exists and does not parse is an error, the
 /// same as an explicit one.
-pub fn load_config(context: ConfigContext) -> ShellResult<ResolvedConfig> {
+pub fn load_config(context: &ConfigContext) -> ShellResult<ResolvedConfig> {
     let home = config_home();
 
     let file = match &context.explicit_file {
@@ -58,16 +60,16 @@ pub fn load_config(context: ConfigContext) -> ShellResult<ResolvedConfig> {
         defaults: defaults(home.as_deref()),
         file,
         environment: environment(),
-        cli: context.cli,
+        cli: context.cli.clone(),
     };
 
     // A machine with neither variable set has no default database, and the core
     // would only be able to say that a path is missing. Say why it is missing.
-    if home.is_none() && input.clone().merge().sqlite_database.is_none() {
+    if home.is_none() && input.clone().merge().database.is_none() {
         return Err(ShellError::NoConfigHome);
     }
 
-    Ok(wayfind_core::resolve_config(input)?)
+    Ok(resolve_config(input)?)
 }
 
 /// Where Wayfind looks when nothing points it anywhere.
@@ -82,12 +84,9 @@ pub fn config_home() -> Option<PathBuf> {
 }
 
 /// The database Wayfind opens when no layer names one.
-///
-/// This is the file the Bash script created, in the place it created it, so an
-/// operator who upgrades keeps their history without moving anything.
 fn defaults(home: Option<&Path>) -> ConfigSource {
     ConfigSource {
-        sqlite_database: home.map(|directory| directory.join(DATABASE_FILE)),
+        database: home.map(|directory| directory.join(DATABASE_FILE)),
         ..ConfigSource::default()
     }
 }
@@ -116,17 +115,14 @@ fn read_optional_config_file(path: &Path) -> ShellResult<ConfigSource> {
 /// Read the layer the environment supplies.
 ///
 /// A variable is named after the setting it sets, with `__` where the
-/// configuration file has a dot and `_` where it has a dash:
-/// `[sqlite-fts5] table` is `WAYFIND_SQLITE_FTS5__TABLE`. An empty variable
-/// says nothing, so `WAYFIND_BACKEND=` in a wrapper script does not force a
-/// backend named "".
+/// configuration file has a dot and `_` where it has a dash: `[sqlite-fts5]
+/// database` is `WAYFIND_SQLITE_FTS5__DATABASE`. An empty variable says
+/// nothing, so `WAYFIND_SQLITE__DATABASE=` in a wrapper script does not point
+/// Wayfind at a file named "".
 fn environment() -> ConfigSource {
     ConfigSource {
-        backend: env_setting("BACKEND"),
-        search_backend: env_setting("SEARCH_BACKEND"),
-        sqlite_database: env_setting("SQLITE__DATABASE").map(PathBuf::from),
-        search_database: env_setting("SQLITE_FTS5__DATABASE").map(PathBuf::from),
-        search_table: env_setting("SQLITE_FTS5__TABLE"),
+        database: env_setting("SQLITE__DATABASE").map(PathBuf::from),
+        fts_database: env_setting("SQLITE_FTS5__DATABASE").map(PathBuf::from),
     }
 }
 

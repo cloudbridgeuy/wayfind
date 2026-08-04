@@ -39,6 +39,7 @@ enum CheckId {
     Test,
     FileLength,
     TooManyArgsAllow,
+    NoLegacyDependency,
 }
 
 /// One check in the pipeline.
@@ -96,6 +97,10 @@ pub struct LintArgs {
     /// Skip the `#[allow(clippy::too_many_arguments)]` ban
     #[arg(long)]
     pub no_too_many_args: bool,
+
+    /// Skip the ban on `crates/core` and `crates/cli` depending on the v1 crates
+    #[arg(long)]
+    pub no_legacy_dependency: bool,
 
     /// Repair what can be repaired: apply formatting and Clippy fixes
     #[arg(long)]
@@ -169,6 +174,13 @@ const CHECKS: &[Check] = &[
         args: &[],
         optional: false,
     },
+    Check {
+        id: CheckId::NoLegacyDependency,
+        name: "no v1 crate dependency (crates/core, crates/cli)",
+        program: "__builtin__",
+        args: &[],
+        optional: false,
+    },
 ];
 
 /// Did the operator ask for this check to be left out?
@@ -180,6 +192,7 @@ fn should_skip(id: CheckId, args: &LintArgs) -> bool {
         CheckId::Test => args.no_test,
         CheckId::FileLength => args.no_file_length,
         CheckId::TooManyArgsAllow => args.no_too_many_args,
+        CheckId::NoLegacyDependency => args.no_legacy_dependency,
     }
 }
 
@@ -388,6 +401,45 @@ fn evaluate_too_many_args(findings: &[TooManyArgsFinding]) -> CheckOutcome {
     }
 }
 
+/// The text that marks a file as depending on a v1 crate.
+///
+/// Every v1 package name carries this prefix (`wayfind_v1_core`,
+/// `wayfind_v1_cli`), so matching the prefix catches a `use` path, an
+/// `extern crate`, or a fully qualified reference alike.
+const LEGACY_PREFIX: &str = "wayfind_v1_";
+
+/// Decide the v1-dependency ban from already-read file contents.
+///
+/// v2's crates carry their own error machinery, their own identifiers, and
+/// their own storage; nothing in `crates/core` or `crates/cli` has a reason to
+/// name a v1 type. A file that does is a coexistence rule broken silently, so
+/// this fails loudly and names every line.
+fn no_legacy_dependency(files: &[(PathBuf, String)]) -> CheckOutcome {
+    let violations: Vec<String> = files
+        .iter()
+        .flat_map(|(path, content)| {
+            content
+                .lines()
+                .enumerate()
+                .filter(|&(_index, line)| line.contains(LEGACY_PREFIX))
+                .map(|(index, line)| format!("  {}:{}: {}", path.display(), index + 1, line.trim()))
+        })
+        .collect();
+
+    if violations.is_empty() {
+        CheckOutcome::Passed {
+            output: String::new(),
+        }
+    } else {
+        CheckOutcome::Failed {
+            output: format!(
+                "crates/core and crates/cli may not depend on the v1 crates:\n{}\n",
+                violations.join("\n")
+            ),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Imperative shell — processes, filesystem, orchestration
 // ---------------------------------------------------------------------------
@@ -437,6 +489,13 @@ pub fn run(args: &LintArgs) -> Result<()> {
                 CheckResult {
                     name: check.name.to_string(),
                     outcome: evaluate_too_many_args(&findings),
+                }
+            }
+            CheckId::NoLegacyDependency => {
+                let files = collect_legacy_dependency_files()?;
+                CheckResult {
+                    name: check.name.to_string(),
+                    outcome: no_legacy_dependency(&files),
                 }
             }
             _ => {
@@ -579,6 +638,28 @@ fn collect_too_many_args() -> Result<Vec<TooManyArgsFinding>> {
     Ok(findings)
 }
 
+/// Every `.rs` file under `crates/core` and `crates/cli`, with its content.
+///
+/// This walks the whole crate directory, not only `src`, because a test or a
+/// fixture naming a v1 type is the same coexistence break as one in library
+/// code.
+fn collect_legacy_dependency_files() -> Result<Vec<(PathBuf, String)>> {
+    let mut files = Vec::new();
+    for root in ["crates/core", "crates/cli"] {
+        let root = PathBuf::from(root);
+        if !root.is_dir() {
+            continue;
+        }
+        let mut paths = Vec::new();
+        rust_files_under(&root, &mut paths)?;
+        for path in paths {
+            let content = fs::read_to_string(&path)?;
+            files.push((path, content));
+        }
+    }
+    Ok(files)
+}
+
 /// The staged Rust files, as the index holds them right now.
 fn collect_staged_rust_files() -> Result<Vec<String>> {
     let output = Command::new("git")
@@ -607,10 +688,13 @@ fn restage_files(files: &[String]) -> Result<()> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+    use std::path::PathBuf;
+
     use super::{
         check_display_name, determine_outcome, evaluate_file_lengths, evaluate_too_many_args,
         fix_args, format_log_entry, is_tool_not_found, line_forbids_too_many_args,
-        scan_file_for_too_many_args, CheckId, CheckOutcome, CheckResult, MAX_FILE_LINES,
+        no_legacy_dependency, scan_file_for_too_many_args, CheckId, CheckOutcome, CheckResult,
+        MAX_FILE_LINES,
     };
 
     fn output_of(outcome: &CheckOutcome) -> String {
@@ -681,6 +765,7 @@ mod tests {
         assert_eq!(fix_args(CheckId::Test), None);
         assert_eq!(fix_args(CheckId::FileLength), None);
         assert_eq!(fix_args(CheckId::TooManyArgsAllow), None);
+        assert_eq!(fix_args(CheckId::NoLegacyDependency), None);
     }
 
     #[test]
@@ -758,5 +843,32 @@ mod tests {
         let findings = scan_file_for_too_many_args("lib.rs", "fn narrow() {}\n");
         assert!(findings.is_empty());
         assert!(!is_failure(&evaluate_too_many_args(&findings)));
+    }
+
+    #[test]
+    fn a_v2_file_that_names_a_v1_crate_fails_and_names_the_line() {
+        let files = vec![
+            (
+                PathBuf::from("crates/core/src/lib.rs"),
+                "use wayfind_v1_core::TicketType;\n".to_string(),
+            ),
+            (
+                PathBuf::from("crates/cli/src/lib.rs"),
+                "pub mod config;\n".to_string(),
+            ),
+        ];
+        let outcome = no_legacy_dependency(&files);
+        assert!(is_failure(&outcome));
+        assert!(output_of(&outcome).contains("crates/core/src/lib.rs:1"));
+        assert!(output_of(&outcome).contains("wayfind_v1_core"));
+    }
+
+    #[test]
+    fn v2_source_with_no_v1_name_passes() {
+        let files = vec![(
+            PathBuf::from("crates/cli/src/lib.rs"),
+            "pub mod config;\npub mod context;\n".to_string(),
+        )];
+        assert!(!is_failure(&no_legacy_dependency(&files)));
     }
 }

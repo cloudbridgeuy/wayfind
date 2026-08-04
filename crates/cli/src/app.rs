@@ -1,184 +1,189 @@
-//! Putting one command together and running it.
+//! The composition root.
 //!
-//! The order here is the whole of the module's content. Configuration is
-//! resolved before anything is opened, so a command aimed at a database that
-//! cannot be named fails before it touches a disk. Exactly one store and
-//! exactly one search index are opened, so a command can never end up reading
-//! one file and writing another. The clock is read once, so everything a single
-//! command writes carries a single time. Only then is the command dispatched.
+//! One place decides which handler answers a parsed command line, and one place
+//! turns whatever comes back into what the operator sees. Keeping both here is
+//! what lets `main` be four lines and lets a test drive the whole program
+//! without a process.
 
-use std::path::Path;
+use std::process::ExitCode;
 
-use wayfind_core::{ResolvedConfig, SearchConfig, StorageConfig};
+use wayfind_core::render;
 
-use crate::args::{
-    text_source, AttachCommand, Cli, Command, FogCommand, InitiativeCommand, ScopeCommand,
-    SessionCommand, SessionsCommand, TicketCommand,
+use crate::{
+    args::{Cli, Command},
+    commands::{self, Shell},
+    config::{self, ConfigContext},
+    context::{self, Environment},
+    error::{ShellError, ShellResult},
+    output::Output,
+    sqlite::SqliteStore,
 };
-use crate::commands::{attachment, initiative, query, session, ticket, Shell};
-use crate::config::{self, ConfigContext};
-use crate::context::{self, Environment};
-use crate::error::{ShellError, ShellResult};
-use crate::output::Output;
-use crate::sqlite::search::SqliteFts5Search;
-use crate::sqlite::SqliteStorage;
 
-/// Carry out one command.
-pub fn run(cli: Cli, environment: &dyn Environment, output: &mut dyn Output) -> ShellResult<()> {
-    let overrides = cli.globals.config_source();
-    let resolved = config::load_config(ConfigContext {
+/// The exit code a failure that is not a refusal ends with.
+///
+/// Class 1 is reserved for faults the operator cannot answer — a broken pipe, an
+/// unreadable file. It is never contractual behavior.
+const INTERNAL_ERROR: u8 = 1;
+
+/// Carry out one command line.
+///
+/// Configuration is resolved and the project key derived before anything is
+/// opened, so a command aimed at a database that cannot be named fails before
+/// it touches a disk. Only `init` is allowed to bring the file into being;
+/// every other command opens what is there, so a mistyped path is reported
+/// instead of quietly leaving an empty store behind.
+pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> ShellResult<()> {
+    let resolved = config::load_config(&ConfigContext {
         explicit_file: cli.globals.config.clone(),
-        cli: overrides,
+        cli: cli.globals.config_source(),
     })?;
-
     let project = context::project_key(environment, cli.globals.project.as_deref())?;
-    let StorageConfig::Sqlite(store) = &resolved.storage;
-    let SearchConfig::SqliteFts5(index) = &resolved.search;
 
-    // Only the two commands that are allowed to bring a database into being use
-    // `initialize`. Everything else opens what is there, so a mistyped path
-    // says so instead of leaving an empty database behind it.
-    let storage = if creates_database(&cli.command) {
-        SqliteStorage::initialize(&store.database)?
+    let already_existed = resolved.database.exists();
+    let store = if matches!(cli.command, Command::Init) {
+        SqliteStore::initialize(&resolved.database)?
     } else {
-        SqliteStorage::open(&store.database)?
+        SqliteStore::open(&resolved.database)?
     };
-    let search = SqliteFts5Search::open(index)?;
 
     let shell = Shell {
-        storage: &storage,
-        search: &search,
+        store: &store,
         environment,
+        database: resolved.database.clone(),
         project,
         chosen_session: cli.globals.session.clone(),
         chosen_initiative: cli.globals.initiative,
         now: environment.now(),
     };
 
-    dispatch(&shell, cli.command, &resolved, output)?;
-    output.flush()
+    match &cli.command {
+        Command::Init => commands::init::run(&shell, already_existed, out),
+
+        Command::Migrate { .. }
+        | Command::Initiative { .. }
+        | Command::Graph { .. }
+        | Command::Snapshot { .. }
+        | Command::Node { .. }
+        | Command::Transition { .. }
+        | Command::Artifact { .. }
+        | Command::Work { .. }
+        | Command::Sessions(_)
+        | Command::Run { .. }
+        | Command::Ticket(_)
+        | Command::Search { .. }
+        | Command::Dump { .. } => Err(commands::not_implemented()),
+    }
 }
 
-/// Whether this command may create the database file.
-fn creates_database(command: &Command) -> bool {
-    matches!(
-        command,
-        Command::Init
-            | Command::Initiative {
-                command: InitiativeCommand::Create { .. }
-            }
-    )
-}
-
-/// Send one parsed command to its handler.
-fn dispatch(
-    shell: &Shell<'_>,
-    command: Command,
-    resolved: &ResolvedConfig,
-    output: &mut dyn Output,
-) -> ShellResult<()> {
-    match command {
-        Command::Init => {
-            let database: &Path = resolved.storage_database();
-            initiative::init(shell, database, &shell.project, output)
+/// Write a failure where the operator will find it, and say how it ended.
+///
+/// A refusal is an error document on standard error with the token the caller
+/// matches on. Anything else is one line and exit 1, because there is no token
+/// for it and inventing one would be a promise the program cannot keep.
+pub fn report(error: &ShellError, err: &mut dyn Output) -> ExitCode {
+    match error.rejection() {
+        Some(rejection) => {
+            let _ = err.text(&render::error::document(rejection));
+            let _ = err.flush();
+            ExitCode::from(rejection.exit_code())
         }
+        None => {
+            let _ = err.text(&format!("{error}\n"));
+            let _ = err.flush();
+            ExitCode::from(INTERNAL_ERROR)
+        }
+    }
+}
 
-        Command::Initiative { command } => match command {
-            InitiativeCommand::Create {
-                name,
-                destination,
-                notes,
-            } => initiative::create(shell, &name, &destination, notes.as_deref(), output),
-            InitiativeCommand::Clear => initiative::clear(shell, output),
-        },
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-        Command::Map => initiative::map(shell, output),
-        Command::Tree => initiative::tree(shell, output),
-        Command::Next => ticket::next(shell, output),
-        Command::Handoff => initiative::handoff(shell, output),
+    use clap::Parser;
 
-        Command::Ticket { id, command } => match (id, command) {
-            (
-                _,
-                Some(TicketCommand::Create {
-                    title,
-                    r#type,
-                    question,
-                }),
-            ) => ticket::create(shell, &title, r#type.into(), &question, output),
-            (_, Some(TicketCommand::Claim { id })) => ticket::claim(shell, id, output),
-            (_, Some(TicketCommand::Resolve { id, resolution })) => {
-                ticket::resolve(shell, id, &resolution.source(), output)
-            }
-            (_, Some(TicketCommand::Amend { id, resolution })) => {
-                ticket::amend(shell, id, &resolution.source(), output)
-            }
-            (_, Some(TicketCommand::Block { id, blocker })) => {
-                ticket::block(shell, id, blocker, output)
-            }
-            (Some(id), None) => ticket::show(shell, id, output),
-            (None, None) => Err(ShellError::refused(
-                "ticket needs an ID to show, or a subcommand; try `wayfind ticket --help`",
-            )),
-        },
+    use super::*;
+    use crate::context::SystemEnvironment;
 
-        Command::Attach { command } => match command {
-            AttachCommand::Add {
-                ticket,
-                file,
-                description,
-                name,
-                move_source,
-            } => attachment::add(
-                shell,
-                attachment::AddAttachment {
-                    ticket,
-                    source: &text_source(file),
-                    description: &description,
-                    chosen_name: name.as_deref(),
-                    move_source,
-                },
-                output,
-            ),
-            AttachCommand::Ref { ticket, attachment } => {
-                attachment::add_reference(shell, ticket, attachment, output)
-            }
-            AttachCommand::Unref { ticket, attachment } => {
-                attachment::remove_reference(shell, ticket, attachment, output)
-            }
-            AttachCommand::List { ticket } => attachment::list(shell, ticket, output),
-            AttachCommand::Show { id, raw } => attachment::show(shell, id, raw, output),
-            AttachCommand::Rm { id } => attachment::remove(shell, id, output),
-        },
+    /// A store already created, so a command under test opens it rather than
+    /// tripping the missing-store refusal that [`crate::commands::init`]'s own
+    /// tests, and the `tests/init.rs` integration test, cover on their own.
+    fn existing_store() -> (tempfile::TempDir, String) {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("wayfind2.sqlite");
+        SqliteStore::initialize(&database).unwrap();
+        let path = database.to_str().unwrap().to_string();
+        (directory, path)
+    }
 
-        Command::Session { command } => match command {
-            SessionCommand::Resume => session::resume(shell, output),
-            SessionCommand::List => session::list(shell, output),
-        },
+    fn refusal_for(arguments: &[&str]) -> ShellError {
+        let (_directory, database) = existing_store();
+        let mut full = vec!["wayfind2", "--sqlite.database", database.as_str()];
+        full.extend_from_slice(arguments);
 
-        Command::Sessions { command } => match command {
-            SessionsCommand::List => session::list(shell, output),
-        },
+        let cli = Cli::try_parse_from(full).unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        run(&cli, &SystemEnvironment::new(), &mut out).unwrap_err()
+    }
 
-        Command::Fog { command } => match command {
-            FogCommand::Add { note } => initiative::fog(shell, &note, output),
-        },
+    #[test]
+    fn a_command_this_slice_does_not_carry_out_refuses_with_the_usage_token() {
+        let error = refusal_for(&["initiative", "list"]);
+        let rejection = error.rejection().unwrap();
+        assert_eq!(rejection.exit_code(), 2);
+        assert_eq!(rejection.body_text(), Some("not implemented in this slice"));
+    }
 
-        Command::Scope { command } => match command {
-            ScopeCommand::Exclude { note } => initiative::exclude(shell, &note, output),
-        },
+    #[test]
+    fn a_refusal_is_reported_as_an_error_document_with_its_own_exit_code() {
+        let error = refusal_for(&["graph", "history"]);
+        let mut err: Vec<u8> = Vec::new();
+        let code = report(&error, &mut err);
 
-        Command::Search {
-            query,
-            limit,
-            offset,
-        } => query::search(shell, &query, limit, offset, output),
+        let document = String::from_utf8(err).unwrap();
+        assert!(document.starts_with("+++\n"));
+        assert!(document.contains("kind = \"error\""));
+        assert!(document.contains("error = \"usage\""));
+        assert_eq!(format!("{code:?}"), format!("{:?}", ExitCode::from(2)));
+    }
 
-        // `--csv` is required and is the only format, so it carries no choice.
-        Command::Dump {
-            csv: _,
-            limit,
-            offset,
-        } => query::dump(shell, limit, offset, output),
+    #[test]
+    fn init_creates_a_store_and_says_so_then_says_it_already_exists() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("nested/wayfind2.sqlite");
+        let path = database.to_str().unwrap();
+
+        let cli = Cli::try_parse_from(["wayfind2", "--sqlite.database", path, "init"]).unwrap();
+        let mut first: Vec<u8> = Vec::new();
+        run(&cli, &SystemEnvironment::new(), &mut first).unwrap();
+        assert_eq!(
+            String::from_utf8(first).unwrap(),
+            format!("created a store at {}\n", database.display())
+        );
+
+        let mut second: Vec<u8> = Vec::new();
+        run(&cli, &SystemEnvironment::new(), &mut second).unwrap();
+        assert_eq!(
+            String::from_utf8(second).unwrap(),
+            format!("a store already exists at {}\n", database.display())
+        );
+    }
+
+    #[test]
+    fn a_command_against_a_missing_store_refuses_with_the_not_found_token() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("wayfind2.sqlite");
+        let path = database.to_str().unwrap();
+
+        let cli =
+            Cli::try_parse_from(["wayfind2", "--sqlite.database", path, "initiative", "list"])
+                .unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        let error = run(&cli, &SystemEnvironment::new(), &mut out).unwrap_err();
+
+        let rejection = error.rejection().unwrap();
+        assert_eq!(rejection.exit_code(), 3);
+        assert!(rejection
+            .body_text()
+            .is_some_and(|body| body.contains("wayfind2 init")));
     }
 }

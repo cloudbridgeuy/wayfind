@@ -155,3 +155,5 @@ _Avoid_: Link, alias, shortcut
   the Bash script's database
 - [Output shape](./.claude/context/output.md) — the document contract every
   command answers with
+- [v2 store lifecycle](./.claude/context/v2-store.md) — creating and opening
+  the `wayfind2` store, and how an unimplemented v2 command answers

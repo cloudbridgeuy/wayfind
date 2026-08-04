@@ -15,7 +15,10 @@
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
-use wayfind_core::{ProjectKey, SessionId, Timestamp};
+use wayfind_core::error::{ErrorToken, Rejection};
+use wayfind_core::id::{ProjectKey, SessionId};
+use wayfind_core::render::Field;
+use wayfind_core::time::Timestamp;
 
 use crate::error::{ShellError, ShellResult};
 
@@ -110,7 +113,7 @@ impl Environment for SystemEnvironment {
     }
 
     fn now(&self) -> Timestamp {
-        Timestamp::from_utc(Utc::now())
+        Timestamp::now_from(Utc::now())
     }
 
     fn read_file(&self, path: &Path) -> ShellResult<Vec<u8>> {
@@ -170,8 +173,10 @@ pub fn session_id(environment: &dyn Environment, chosen: Option<&str>) -> ShellR
             return Ok(SessionId::new(value)?);
         }
     }
-    Err(ShellError::refused(
-        "a session is required; pass --session ID or set WAYFIND_SESSION_ID",
+    Err(ShellError::Rejected(
+        Rejection::new(ErrorToken::Usage)
+            .key("field", Field::Text("session".to_string()))
+            .body("A session is required. Pass --session ID or set WAYFIND_SESSION_ID."),
     ))
 }
 
@@ -182,10 +187,16 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
-    use wayfind_core::Timestamp;
+    use wayfind_core::error::{ErrorToken, Rejection};
+    use wayfind_core::time::Timestamp;
 
     use super::{project_key, session_id, Environment};
     use crate::error::{ShellError, ShellResult};
+
+    /// The one refusal the fake world has to offer.
+    fn no_such_thing() -> ShellError {
+        ShellError::Rejected(Rejection::new(ErrorToken::NotFound).body("nothing here"))
+    }
 
     /// A world with nothing in it but what a test puts there.
     struct FakeEnvironment {
@@ -232,19 +243,19 @@ mod tests {
         }
 
         fn now(&self) -> Timestamp {
-            "2026-01-01 00:00:00".parse().unwrap()
+            "2026-01-01T00:00:00Z".parse().unwrap()
         }
 
         fn read_file(&self, _path: &Path) -> ShellResult<Vec<u8>> {
-            Err(ShellError::refused("no files here"))
+            Err(no_such_thing())
         }
 
         fn read_input(&self) -> ShellResult<Vec<u8>> {
-            Err(ShellError::refused("no input here"))
+            Err(no_such_thing())
         }
 
         fn remove_file(&self, _path: &Path) -> ShellResult<()> {
-            Err(ShellError::refused("no files here"))
+            Err(no_such_thing())
         }
     }
 
@@ -295,6 +306,11 @@ mod tests {
     fn an_unnamed_session_is_refused_rather_than_invented() {
         let environment = FakeEnvironment::at("/work");
         let error = session_id(&environment, None).unwrap_err();
-        assert!(error.to_string().contains("--session"));
+        let rejection = error.rejection().expect("a rejection, not a fault");
+        assert_eq!(rejection.token(), ErrorToken::Usage);
+        assert!(rejection
+            .body_text()
+            .unwrap_or_default()
+            .contains("--session"));
     }
 }

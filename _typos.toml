@@ -1,0 +1,5 @@
+[default.extend-words]
+# Deliberately misspelled in the "unknown config key" tests
+# (crates/core/src/config.rs, crates/legacy-core/src/config.rs) — the
+# refusal message must echo the key exactly as written.
+databse = "databse"
