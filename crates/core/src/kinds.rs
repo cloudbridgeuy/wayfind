@@ -203,6 +203,54 @@ impl FromStr for TransitionKind {
     }
 }
 
+/// The typed relation a connection expresses between two records.
+///
+/// Declared here in slice A2 because `ConnectionDraft` needs it to compile;
+/// slice B1 is the one that puts it to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Relation {
+    MappedBy,
+    ContainsScope,
+    DependsOn,
+}
+
+impl Relation {
+    /// Every relation, in declaration order.
+    pub const ALL: [Relation; 3] = [Self::MappedBy, Self::ContainsScope, Self::DependsOn];
+
+    /// The word this relation writes into a canonical encoding.
+    pub fn as_token(self) -> &'static str {
+        match self {
+            Self::MappedBy => "mapped-by",
+            Self::ContainsScope => "contains-scope",
+            Self::DependsOn => "depends-on",
+        }
+    }
+}
+
+impl fmt::Display for Relation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_token())
+    }
+}
+
+impl FromStr for Relation {
+    type Err = Rejection;
+
+    fn from_str(text: &str) -> Result<Self, Rejection> {
+        Self::ALL
+            .into_iter()
+            .find(|relation| relation.as_token() == text)
+            .ok_or_else(|| {
+                let accepted: Vec<&str> = Self::ALL
+                    .iter()
+                    .map(|relation| relation.as_token())
+                    .collect();
+                refuse("relation", text, &accepted)
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
