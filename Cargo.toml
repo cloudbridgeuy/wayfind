@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/core", "crates/cli", "xtask"]
+members = ["crates/legacy-core", "crates/legacy-cli", "xtask"]
 resolver = "2"
 
 [workspace.package]
@@ -74,4 +74,4 @@ thiserror = "2"
 toml = "0.9"
 
 # Internal crates
-wayfind_core = { version = "0.1.0", path = "crates/core" }
+wayfind_v1_core = { version = "0.1.0", path = "crates/legacy-core" }

@@ -918,7 +918,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wayfind_cli"
+name = "wayfind_v1_cli"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -930,11 +930,11 @@ dependencies = [
  "tempfile",
  "thiserror",
  "toml",
- "wayfind_core",
+ "wayfind_v1_core",
 ]
 
 [[package]]
-name = "wayfind_core"
+name = "wayfind_v1_core"
 version = "0.1.0"
 dependencies = [
  "chrono",
