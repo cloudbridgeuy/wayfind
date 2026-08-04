@@ -4,6 +4,9 @@
 //! about table discipline and about which capability trait may touch which
 //! table, not about how many files are on disk.
 
+pub mod allocator;
+pub mod graph_read;
+pub mod graph_write;
 pub mod schema;
 pub mod store;
 
