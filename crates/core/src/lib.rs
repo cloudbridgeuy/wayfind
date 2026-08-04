@@ -16,4 +16,5 @@ pub mod id;
 pub mod kinds;
 pub mod record;
 pub mod render;
+pub mod storage;
 pub mod time;
