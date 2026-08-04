@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 
+use crate::args::retired::Rest;
+
 /// What can be done to an initiative.
 #[derive(Debug, Clone, Subcommand)]
 pub enum InitiativeCommand {
@@ -80,4 +82,8 @@ pub enum InitiativeCommand {
         #[arg(long, value_name = "NAME")]
         name: String,
     },
+
+    /// Retired: errors naming `run clear`.
+    #[command(hide = true)]
+    Clear(Rest),
 }
