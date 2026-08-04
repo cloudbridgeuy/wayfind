@@ -5,5 +5,6 @@
 //! implement one trait instead of doing it slowly inside a method nobody
 //! expected to be expensive.
 
+pub mod coordination;
 pub mod graph;
 pub mod values;
