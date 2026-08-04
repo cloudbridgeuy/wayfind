@@ -15,8 +15,14 @@ use wayfind_core::storage::values::{StorageError, StorageResult};
 use wayfind_core::validate::initiative::ValidatedInitiative;
 
 /// The immutable graph, over one connection.
+///
+/// One struct implements every capability trait the SQLite backend answers
+/// for — [`GraphAppender`] here, [`wayfind_core::storage::graph::GraphReader`]
+/// in `graph_read.rs`, and
+/// [`wayfind_core::storage::coordination::MutableIdAllocator`] in
+/// `allocator.rs` — the same shape v1's `SqliteStorage` uses.
 pub struct SqliteGraph<'a> {
-    connection: &'a Connection,
+    pub(crate) connection: &'a Connection,
 }
 
 impl<'a> SqliteGraph<'a> {
@@ -59,8 +65,32 @@ impl GraphAppender for SqliteGraph<'_> {
 }
 
 /// Turn a SQLite failure into an infrastructure error naming the operation.
-fn failed(operation: &'static str) -> impl Fn(rusqlite::Error) -> StorageError {
+pub(crate) fn failed(operation: &'static str) -> impl Fn(rusqlite::Error) -> StorageError {
     move |error| StorageError::infrastructure(operation, error.to_string())
+}
+
+/// Draw the next identifier from an `id_sequences` scope.
+///
+/// This slice's store is always freshly created, so unlike v1's migrated
+/// databases there are no un-counted rows to fall back to: the counter is the
+/// only source of truth.
+pub(crate) fn next_id(tx: &Transaction, scope: &'static str) -> StorageResult<i64> {
+    let current: Option<i64> = tx
+        .query_row(
+            "SELECT next_id FROM id_sequences WHERE scope = ?1",
+            [scope],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(failed("allocate id"))?;
+    let next = current.unwrap_or(0) + 1;
+    tx.execute(
+        "INSERT INTO id_sequences (scope, next_id) VALUES (?1, ?2)
+         ON CONFLICT(scope) DO UPDATE SET next_id = excluded.next_id",
+        params![scope, next],
+    )
+    .map_err(failed("allocate id"))?;
+    Ok(next)
 }
 
 /// A row already in the database is corrupt data, not a fault an operator
@@ -85,28 +115,8 @@ fn existing_initiative(
     existing.map(to_initiative_id).transpose()
 }
 
-/// Draw the next identifier from the `initiative` scope.
-///
-/// This slice's store is always freshly created, so unlike v1's migrated
-/// databases there are no un-counted rows to fall back to: the counter is the
-/// only source of truth.
 fn allocate_initiative_id(tx: &Transaction) -> StorageResult<InitiativeId> {
-    let current: Option<i64> = tx
-        .query_row(
-            "SELECT next_id FROM id_sequences WHERE scope = 'initiative'",
-            [],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(failed("allocate initiative id"))?;
-    let next = current.unwrap_or(0) + 1;
-    tx.execute(
-        "INSERT INTO id_sequences (scope, next_id) VALUES ('initiative', ?1)
-         ON CONFLICT(scope) DO UPDATE SET next_id = excluded.next_id",
-        [next],
-    )
-    .map_err(failed("allocate initiative id"))?;
-    to_initiative_id(next)
+    to_initiative_id(next_id(tx, "initiative")?)
 }
 
 fn insert_project(tx: &Transaction, validated: &ValidatedInitiative) -> StorageResult<()> {

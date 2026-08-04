@@ -16,7 +16,7 @@ use crate::{
     context::{self, Environment},
     error::{ShellError, ShellResult},
     output::Output,
-    sqlite::SqliteStore,
+    sqlite::{graph_write::SqliteGraph, SqliteStore},
 };
 
 /// The exit code a failure that is not a refusal ends with.
@@ -46,8 +46,11 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
         SqliteStore::open(&resolved.database)?
     };
 
+    let graph = SqliteGraph::new(store.connection());
     let shell = Shell {
         store: &store,
+        graph: &graph,
+        coordination: &graph,
         environment,
         database: resolved.database.clone(),
         project,

@@ -7,14 +7,12 @@ use wayfind_core::command::graph::CreateInitiativeCommand;
 use wayfind_core::error::ErrorToken;
 use wayfind_core::outcome::graph::CreateInitiativeOutcome;
 use wayfind_core::render::{self, Field};
-use wayfind_core::storage::graph::GraphAppender;
 use wayfind_core::validate::initiative::validate_create;
 
 use super::Shell;
 use crate::context::session_id;
 use crate::error::ShellResult;
 use crate::output::Output;
-use crate::sqlite::graph_write::SqliteGraph;
 
 /// Chart a new initiative and write its destination node as the first record
 /// of an otherwise empty graph.
@@ -37,8 +35,7 @@ pub fn create(
     let destination_node = validated.destination_node.id;
     let head = validated.snapshot.ordinal;
 
-    let graph = SqliteGraph::new(shell.store.connection());
-    match graph.create_initiative(validated)? {
+    match shell.graph.create_initiative(validated)? {
         CreateInitiativeOutcome::Created(initiative) => {
             let document =
                 render::initiative::initiative_document(&initiative, head, &destination_node);

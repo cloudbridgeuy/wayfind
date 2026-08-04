@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use wayfind_core::{
     error::{ErrorToken, Rejection},
     id::ProjectKey,
+    storage::{coordination::CoordinationStorage, graph::GraphStorage},
     time::Timestamp,
 };
 
@@ -29,6 +30,10 @@ use crate::{context::Environment, error::ShellError, sqlite::SqliteStore};
 pub struct Shell<'a> {
     /// The store, open for this command.
     pub store: &'a SqliteStore,
+    /// The immutable graph: initiatives, snapshots, and their records.
+    pub graph: &'a dyn GraphStorage,
+    /// The coordination domain's identifier allocator.
+    pub coordination: &'a dyn CoordinationStorage,
     /// The machine the program is running on.
     pub environment: &'a dyn Environment,
     /// The database file this command opened or created.
