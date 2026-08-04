@@ -10,6 +10,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 pub mod config;
+pub mod encode;
 pub mod error;
 pub mod id;
 pub mod kinds;
