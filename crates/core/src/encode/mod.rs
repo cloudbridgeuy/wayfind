@@ -7,6 +7,7 @@
 //! hash differently, so the two cannot collapse into one representation.
 
 pub mod artifact;
+pub mod chain;
 pub mod connection;
 pub mod node;
 pub mod transition;
