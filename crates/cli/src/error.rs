@@ -41,6 +41,10 @@ pub enum ShellError {
     #[error(transparent)]
     Storage(#[from] rusqlite::Error),
 
+    /// A capability trait could not carry out a read or a write.
+    #[error(transparent)]
+    Graph(#[from] wayfind_core::storage::values::StorageError),
+
     /// A file the operator named could not be used.
     ///
     /// The path is carried separately because `std::io::Error` never holds one,

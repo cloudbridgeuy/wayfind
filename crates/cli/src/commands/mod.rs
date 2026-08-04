@@ -10,6 +10,7 @@
 //! replaces a body and never a spelling.
 
 pub mod init;
+pub mod initiative;
 
 use std::path::PathBuf;
 

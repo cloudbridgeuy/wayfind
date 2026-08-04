@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use wayfind_core::render;
 
 use crate::{
-    args::{Cli, Command},
+    args::{initiative::InitiativeCommand, Cli, Command},
     commands::{self, Shell},
     config::{self, ConfigContext},
     context::{self, Environment},
@@ -58,6 +58,15 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
 
     match &cli.command {
         Command::Init => commands::init::run(&shell, already_existed, out),
+
+        Command::Initiative {
+            command:
+                InitiativeCommand::Create {
+                    name,
+                    destination,
+                    notes,
+                },
+        } => commands::initiative::create(&shell, name, destination, notes.as_deref(), out),
 
         Command::Migrate { .. }
         | Command::Initiative { .. }
