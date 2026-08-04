@@ -5,3 +5,6 @@
 //! configuration collection, the SQLite store — can be exercised by a test that
 //! links against them rather than only by running the binary.
 #![deny(clippy::unwrap_used, clippy::expect_used)]
+
+pub mod config;
+pub mod error;
