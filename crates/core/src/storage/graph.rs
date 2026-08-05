@@ -4,9 +4,9 @@
 //! statement, no row, no SQL text. Later slices extend these traits; they
 //! never fork a parallel one.
 
-use crate::id::{InitiativeId, ProjectKey, RecordId};
+use crate::id::{Hash, InitiativeId, ProjectKey, RecordId, RecordKind, SnapshotOrdinal};
 use crate::outcome::graph::CreateInitiativeOutcome;
-use crate::record::{Initiative, Snapshot};
+use crate::record::{Initiative, ResultNode, Snapshot, Transition};
 use crate::storage::values::StorageResult;
 use crate::validate::initiative::ValidatedInitiative;
 
@@ -23,6 +23,30 @@ pub trait GraphReader {
 
     /// The root snapshot's membership.
     fn root_members(&self, id: InitiativeId) -> StorageResult<Vec<RecordId>>;
+
+    /// One snapshot of an initiative.
+    fn snapshot(
+        &self,
+        id: InitiativeId,
+        ordinal: SnapshotOrdinal,
+    ) -> StorageResult<Option<Snapshot>>;
+
+    /// The transitions accepted through a snapshot, ordinal order, from
+    /// snapshot 2 through `through`.
+    fn accepted_transitions(
+        &self,
+        id: InitiativeId,
+        through: SnapshotOrdinal,
+    ) -> StorageResult<Vec<Transition>>;
+
+    /// One result node.
+    fn node(&self, hash: &Hash) -> StorageResult<Option<ResultNode>>;
+
+    /// Every record of a kind whose hash starts with a hex prefix.
+    ///
+    /// Returns candidates, not an outcome — the core's `resolve` turns
+    /// candidates into an outcome. The adapter must not decide ambiguity.
+    fn resolve_prefix(&self, kind: RecordKind, hex: &str) -> StorageResult<Vec<RecordId>>;
 }
 
 /// Appending to the immutable graph.
