@@ -1,12 +1,13 @@
-//! `wayfind2 initiative create` and the rest of the initiative group.
+//! `wayfind2 initiative create`, `list`, and `show`.
 //!
-//! Only `create` runs in this slice; every other member of the group is still
-//! the A1 usage refusal.
+//! `close`, `clone`, and `import` are still the A1 usage refusal.
 
 use wayfind_core::command::graph::CreateInitiativeCommand;
 use wayfind_core::error::ErrorToken;
+use wayfind_core::id::{InitiativeId, RecordKind};
 use wayfind_core::outcome::graph::CreateInitiativeOutcome;
 use wayfind_core::render::{self, Field};
+use wayfind_core::storage::values::StorageError;
 use wayfind_core::validate::initiative::validate_create;
 
 use super::Shell;
@@ -48,4 +49,42 @@ pub fn create(
             Err(rejection.into())
         }
     }
+}
+
+/// List every initiative of the current project.
+pub fn list(shell: &Shell, output: &mut dyn Output) -> ShellResult<()> {
+    let initiatives = shell.graph.initiatives(&shell.project)?;
+    let document = render::initiative::initiative_list_document(&shell.project, &initiatives);
+    output.text(&document)
+}
+
+/// Show one initiative at its head snapshot.
+pub fn show(shell: &Shell, id: i64, output: &mut dyn Output) -> ShellResult<()> {
+    let initiative_id = InitiativeId::new(id)?;
+    let initiative = shell.graph.initiative(initiative_id)?.ok_or_else(|| {
+        wayfind_core::error::Rejection::new(ErrorToken::NotFound)
+            .key("initiative", Field::Number(id))
+            .body("No initiative holds that id.")
+    })?;
+
+    let snapshots = shell.graph.snapshots(initiative_id)?;
+    let head = snapshots
+        .iter()
+        .map(|snapshot| snapshot.ordinal)
+        .max()
+        .ok_or_else(|| StorageError::CorruptData(format!("initiative {id} has no snapshots")))?;
+
+    let root_members = shell.graph.root_members(initiative_id)?;
+    let destination = root_members
+        .iter()
+        .find(|member| member.kind() == RecordKind::Node)
+        .copied()
+        .ok_or_else(|| {
+            StorageError::CorruptData(format!(
+                "initiative {id} has no destination node among its root members"
+            ))
+        })?;
+
+    let document = render::initiative::initiative_document(&initiative, head, &destination);
+    output.text(&document)
 }

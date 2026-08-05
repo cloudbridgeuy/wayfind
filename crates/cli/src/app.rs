@@ -79,6 +79,14 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
         } => commands::initiative::create(&shell, name, destination, notes.as_deref(), out),
 
         Command::Initiative {
+            command: InitiativeCommand::List,
+        } => commands::initiative::list(&shell, out),
+
+        Command::Initiative {
+            command: InitiativeCommand::Show { id },
+        } => commands::initiative::show(&shell, *id, out),
+
+        Command::Initiative {
             command: InitiativeCommand::Clear(args),
         } => Err(retired::refuse(&["initiative", "clear"], &args.rest)),
 
@@ -148,7 +156,15 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
         } => Err(retired::refuse(&["attach", "rm"], &args.rest)),
 
         Command::Migrate { .. }
-        | Command::Initiative { .. }
+        | Command::Initiative {
+            command: InitiativeCommand::Close { .. },
+        }
+        | Command::Initiative {
+            command: InitiativeCommand::Clone { .. },
+        }
+        | Command::Initiative {
+            command: InitiativeCommand::Import { .. },
+        }
         | Command::Graph { .. }
         | Command::Snapshot { .. }
         | Command::Node { .. }
@@ -215,7 +231,7 @@ mod tests {
 
     #[test]
     fn a_command_this_slice_does_not_carry_out_refuses_with_the_usage_token() {
-        let error = refusal_for(&["initiative", "list"]);
+        let error = refusal_for(&["migrate"]);
         let rejection = error.rejection().unwrap();
         assert_eq!(rejection.exit_code(), 2);
         assert_eq!(rejection.body_text(), Some("not implemented in this slice"));

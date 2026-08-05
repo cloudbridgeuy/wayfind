@@ -1,7 +1,7 @@
 //! The `initiative` document: what `initiative create` and `initiative show`
-//! print.
+//! print; and the `initiative-list` document `initiative list` prints.
 
-use crate::id::{RecordId, SnapshotOrdinal};
+use crate::id::{ProjectKey, RecordId, SnapshotOrdinal};
 use crate::record::Initiative;
 use crate::render::FrontMatter;
 
@@ -35,13 +35,31 @@ pub fn initiative_document(
     out
 }
 
+/// Render every initiative of a project.
+pub fn initiative_list_document(project: &ProjectKey, initiatives: &[Initiative]) -> String {
+    let mut out = FrontMatter::new("initiative-list")
+        .text("project", project.as_str())
+        .number("count", initiatives.len() as i64)
+        .render();
+
+    out.push('\n');
+    for initiative in initiatives {
+        out.push_str(&format!("## {}\n\n", initiative.name));
+        out.push_str(&format!("- initiative: {}\n", initiative.id.get()));
+        out.push_str(&format!("- destination: {}\n", initiative.destination));
+        out.push_str(&format!("- created: {}\n\n", initiative.created_at));
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use std::str::FromStr;
 
-    use super::initiative_document;
+    use super::{initiative_document, initiative_list_document};
     use crate::id::{InitiativeId, ProjectKey, RecordId, SnapshotOrdinal};
     use crate::record::Initiative;
     use crate::time::Timestamp;
@@ -69,5 +87,19 @@ mod tests {
 
         assert!(out.contains(&format!("destination_node = \"{}\"", id)));
         assert!(out.contains(&id.abbreviated()));
+    }
+
+    #[test]
+    fn the_list_document_carries_the_project_the_count_and_one_section_per_initiative() {
+        let project = ProjectKey::new("/repo").unwrap();
+        let out = initiative_list_document(&project, &[initiative()]);
+
+        assert!(out.contains("kind = \"initiative-list\""));
+        assert!(out.contains("project = \"/repo\""));
+        assert!(out.contains("count = 1"));
+        assert!(out.contains("## Ship v2"));
+
+        let empty = initiative_list_document(&project, &[]);
+        assert!(empty.contains("count = 0"));
     }
 }

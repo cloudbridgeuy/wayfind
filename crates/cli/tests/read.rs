@@ -103,3 +103,62 @@ fn resolve_prefix_finds_the_destination_node_by_a_short_hex_run() {
         .unwrap();
     assert!(wrong_kind.is_empty());
 }
+
+fn wayfind2(home: &std::path::Path, arguments: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_wayfind2"))
+        .args(arguments)
+        .env("XDG_CONFIG_HOME", home)
+        .env_remove("WAYFIND_SESSION_ID")
+        .output()
+        .expect("run wayfind2")
+}
+
+fn front_matter(stdout: &[u8]) -> toml::Table {
+    let document = String::from_utf8(stdout.to_vec()).unwrap();
+    let fenced = document
+        .strip_prefix("+++\n")
+        .expect("document opens with a front-matter fence");
+    let end = fenced.find("+++").expect("document closes the fence");
+    fenced[..end].parse::<toml::Table>().unwrap()
+}
+
+#[test]
+fn initiative_list_and_show_carry_the_same_facts_the_adapter_read() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(wayfind2(home.path(), &["init"]).status.success());
+    assert!(wayfind2(
+        home.path(),
+        &[
+            "initiative",
+            "create",
+            "--name",
+            "Ship v2",
+            "--destination",
+            "wayfind v2 in daily use",
+            "--session",
+            "s",
+        ]
+    )
+    .status
+    .success());
+
+    let list = wayfind2(home.path(), &["initiative", "list"]);
+    assert!(list.status.success());
+    let list_matter = front_matter(&list.stdout);
+    assert_eq!(list_matter["kind"].as_str(), Some("initiative-list"));
+    assert_eq!(list_matter["count"].as_integer(), Some(1));
+
+    let show = wayfind2(home.path(), &["initiative", "show", "1"]);
+    assert!(show.status.success());
+    let show_matter = front_matter(&show.stdout);
+    assert_eq!(show_matter["kind"].as_str(), Some("initiative"));
+    assert_eq!(show_matter["initiative"].as_integer(), Some(1));
+    assert_eq!(show_matter["name"].as_str(), Some("Ship v2"));
+    assert_eq!(show_matter["head"].as_str(), Some("S1"));
+
+    let missing = wayfind2(home.path(), &["initiative", "show", "2"]);
+    assert!(!missing.status.success());
+    let error_matter = front_matter(&missing.stderr);
+    assert_eq!(error_matter["kind"].as_str(), Some("error"));
+    assert_eq!(error_matter["error"].as_str(), Some("not-found"));
+}
