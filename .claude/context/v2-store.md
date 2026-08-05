@@ -32,12 +32,15 @@ Every command but `init` opens the store rather than creating it.
   `wayfind2 init` as the fix
 
 ### Requirement: v2's command surface is declared but not yet carried out
-The full v2 command tree parses, but only `init` and `initiative create` (see
-[v2 initiative creation](v2-initiative.md)) are implemented; every other
-command not covered by [the retired v1 surface](v2-retired.md) is a stub.
+The full v2 command tree parses, but only `init`, `initiative create` (see
+[v2 initiative creation](v2-initiative.md)), and the six read commands (see
+[v2 graph reads](v2-graph-read.md): `initiative list`, `initiative show`,
+`graph show`, `snapshot list`, `snapshot show`, `node show`) are implemented;
+every other command not covered by [the retired v1 surface](v2-retired.md) is
+a stub.
 
 #### Scenario: A command this slice does not implement
-- **WHEN** a v2 command other than `init`, `initiative create`, or a retired
-  v1 spelling runs against an existing store
+- **WHEN** a v2 command other than `init`, `initiative create`, one of the six
+  read commands, or a retired v1 spelling runs against an existing store
 - **THEN** the command refuses with exit 2 and an error document whose body
   says the command is not implemented in this slice

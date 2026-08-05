@@ -22,7 +22,8 @@ Shell pattern (`~/.claude/patterns/functional-core-imperative-shell.md`).
   configuration, standard input, the filesystem, `now`, and the Rusqlite
   adapters. It contains no business rule. v2's current behavior is tracked in
   [v2 store lifecycle](.claude/context/v2-store.md),
-  [v2 initiative creation](.claude/context/v2-initiative.md), and
+  [v2 initiative creation](.claude/context/v2-initiative.md),
+  [v2 graph reads](.claude/context/v2-graph-read.md), and
   [the retired v1 surface](.claude/context/v2-retired.md).
 
 Neither crate in either line may name a type from the other line — a file
@@ -88,6 +89,9 @@ lives in topic files, one requirement per behavior:
   `wayfind2` store, and how an unimplemented v2 command answers
 - [v2 initiative creation](.claude/context/v2-initiative.md) — charting a new
   initiative and writing its destination as the graph's first record
+- [v2 graph reads](.claude/context/v2-graph-read.md) — listing and showing
+  initiatives, snapshots, and the graph, and addressing a node by a full id
+  or an unambiguous prefix
 - [The retired v1 surface](.claude/context/v2-retired.md) — the nineteen v1
   spellings that answer with their exact v2 replacement instead of running
 
