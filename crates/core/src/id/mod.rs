@@ -15,4 +15,4 @@ pub use hash::Hash;
 pub use numeric::{DecisionId, InitiativeId, NoteId, QuestionId, RunAttachmentId, RunId, TicketId};
 pub use prefix::HexPrefix;
 pub use project::{ProjectKey, SessionId};
-pub use record::{RecordId, RecordKind, SnapshotOrdinal};
+pub use record::{RecordId, RecordKind, SnapshotOrdinal, SnapshotSelector};

@@ -149,6 +149,27 @@ impl FromStr for SnapshotOrdinal {
     }
 }
 
+/// Which snapshot a read command means: the head, or a specific ordinal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotSelector {
+    /// The snapshot with the highest ordinal.
+    Head,
+    /// One specific snapshot.
+    Ordinal(SnapshotOrdinal),
+}
+
+impl FromStr for SnapshotSelector {
+    type Err = Rejection;
+
+    /// Parse `"head"`, `"S4"`, or the bare `"4"`.
+    fn from_str(text: &str) -> Result<Self, Rejection> {
+        if text == "head" {
+            return Ok(Self::Head);
+        }
+        SnapshotOrdinal::from_str(text).map(Self::Ordinal)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -188,5 +209,23 @@ mod tests {
 
         assert!(SnapshotOrdinal::from_str("S0").is_err());
         assert!(SnapshotOrdinal::from_str("0").is_err());
+    }
+
+    #[test]
+    fn snapshot_selector_parses_head_and_both_ordinal_forms() {
+        use super::{SnapshotOrdinal, SnapshotSelector};
+
+        assert_eq!(
+            SnapshotSelector::from_str("head").unwrap(),
+            SnapshotSelector::Head
+        );
+        assert_eq!(
+            SnapshotSelector::from_str("S4").unwrap(),
+            SnapshotSelector::Ordinal(SnapshotOrdinal::new(4).unwrap())
+        );
+        assert_eq!(
+            SnapshotSelector::from_str("4").unwrap(),
+            SnapshotSelector::Ordinal(SnapshotOrdinal::new(4).unwrap())
+        );
     }
 }
