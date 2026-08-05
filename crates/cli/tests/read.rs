@@ -225,3 +225,44 @@ fn snapshot_list_and_show_carry_the_root_members_and_the_full_chain_hash() {
     let usage_matter = front_matter(&no_initiative.stderr);
     assert_eq!(usage_matter["error"].as_str(), Some("usage"));
 }
+
+#[test]
+fn graph_show_lists_exactly_one_node_and_no_transition_after_one_create() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(wayfind2(home.path(), &["init"]).status.success());
+    assert!(wayfind2(
+        home.path(),
+        &[
+            "initiative",
+            "create",
+            "--name",
+            "Ship v2",
+            "--destination",
+            "wayfind v2 in daily use",
+            "--session",
+            "s",
+        ]
+    )
+    .status
+    .success());
+
+    let show = wayfind2(home.path(), &["--initiative", "1", "graph", "show"]);
+    assert!(show.status.success());
+    let matter = front_matter(&show.stdout);
+    assert_eq!(matter["kind"].as_str(), Some("graph"));
+    assert_eq!(matter["initiative"].as_integer(), Some(1));
+    assert_eq!(matter["snapshot"].as_str(), Some("S1"));
+    assert_eq!(matter["nodes"].as_integer(), Some(1));
+    assert_eq!(matter["transitions"].as_integer(), Some(0));
+    assert_eq!(matter["connections"].as_integer(), Some(0));
+
+    let body = String::from_utf8(show.stdout).unwrap();
+    assert!(body.contains("Ship v2"));
+
+    let explicit_head = wayfind2(
+        home.path(),
+        &["--initiative", "1", "graph", "show", "--snapshot", "S1"],
+    );
+    assert!(explicit_head.status.success());
+    assert_eq!(front_matter(&explicit_head.stdout), matter);
+}

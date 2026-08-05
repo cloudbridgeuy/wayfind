@@ -11,7 +11,7 @@ use wayfind_core::render;
 
 use crate::{
     args::{
-        graph::SnapshotCommand,
+        graph::{GraphCommand, SnapshotCommand},
         initiative::InitiativeCommand,
         retired::{
             RetiredAttachCommand, RetiredFogCommand, RetiredScopeCommand, RetiredSessionCommand,
@@ -90,6 +90,10 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
         Command::Initiative {
             command: InitiativeCommand::Clear(args),
         } => Err(retired::refuse(&["initiative", "clear"], &args.rest)),
+
+        Command::Graph {
+            command: GraphCommand::Show { snapshot },
+        } => commands::graph::show(&shell, snapshot.as_deref(), out),
 
         Command::Snapshot {
             command: SnapshotCommand::List,
@@ -177,7 +181,33 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
         | Command::Snapshot {
             command: SnapshotCommand::Diff { .. },
         }
-        | Command::Graph { .. }
+        | Command::Graph {
+            command: GraphCommand::Frontier { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::History,
+        }
+        | Command::Graph {
+            command: GraphCommand::Impact { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::Split { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::Merge { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::Block { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::Recover { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::Abandon { .. },
+        }
+        | Command::Graph {
+            command: GraphCommand::Supersede { .. },
+        }
         | Command::Node { .. }
         | Command::Transition { .. }
         | Command::Artifact { .. }

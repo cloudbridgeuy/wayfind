@@ -9,6 +9,7 @@
 //! usage token instead. The argument surface is settled, so a later slice
 //! replaces a body and never a spelling.
 
+pub mod graph;
 pub mod init;
 pub mod initiative;
 pub mod retired;

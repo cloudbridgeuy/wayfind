@@ -2,8 +2,8 @@
 //! `snapshot show` print.
 
 use crate::derive::GraphState;
-use crate::id::InitiativeId;
-use crate::record::Snapshot;
+use crate::id::{InitiativeId, SnapshotOrdinal};
+use crate::record::{ResultNode, Snapshot, Transition};
 use crate::render::FrontMatter;
 
 /// Render every snapshot of an initiative, in ordinal order.
@@ -97,13 +97,61 @@ pub fn snapshot_document(snapshot: &Snapshot, members: &GraphState) -> String {
     out
 }
 
+/// Render the graph at one snapshot: its members' counts, then a section per
+/// kind naming each member by its abbreviation and its title or summary.
+///
+/// `nodes` and `transitions` carry the full records of `members`' node and
+/// transition members — `members` alone only has their ids, and the body
+/// needs the text a reader recognizes a record by.
+pub fn graph_document(
+    members: &GraphState,
+    initiative: InitiativeId,
+    at: SnapshotOrdinal,
+    nodes: &[ResultNode],
+    transitions: &[Transition],
+) -> String {
+    let mut out = FrontMatter::new("graph")
+        .number("initiative", initiative.get())
+        .text("snapshot", at.to_string())
+        .number("nodes", members.nodes().len() as i64)
+        .number("transitions", members.transitions().len() as i64)
+        .number("connections", members.connections().len() as i64)
+        .render();
+
+    out.push('\n');
+    out.push_str("## Nodes\n\n");
+    for node in nodes {
+        out.push_str(&format!(
+            "- {} {}\n",
+            node.id.abbreviated(),
+            node.draft.title
+        ));
+    }
+
+    out.push_str("\n## Transitions\n\n");
+    for transition in transitions {
+        out.push_str(&format!(
+            "- {} {}\n",
+            transition.id.abbreviated(),
+            transition.draft.summary
+        ));
+    }
+
+    out.push_str("\n## Connections\n\n");
+    for connection in members.connections() {
+        out.push_str(&format!("- {}\n", connection.abbreviated()));
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use std::str::FromStr;
 
-    use super::{snapshot_document, snapshot_list_document};
+    use super::{graph_document, snapshot_document, snapshot_list_document};
     use crate::derive::members_at;
     use crate::id::{Hash, InitiativeId, RecordId, SnapshotOrdinal};
     use crate::record::Snapshot;
@@ -149,5 +197,39 @@ mod tests {
         assert!(out.contains("kind = \"snapshot\""));
         assert!(out.contains(&format!("chain_hash = \"{}\"", "a".repeat(64))));
         assert!(out.contains(&format!("nodes = [\"{id}\"]")));
+    }
+
+    #[test]
+    fn the_graph_document_lists_one_node_and_no_transition_after_a_root_snapshot() {
+        use crate::id::{RecordKind, SessionId};
+        use crate::kinds::NodeKind;
+        use crate::record::{NodeDraft, ResultNode};
+
+        let id = RecordId::new(RecordKind::Node, Hash::parse_hex(&"b".repeat(64)).unwrap());
+        let node = ResultNode {
+            id,
+            draft: NodeDraft {
+                node_kind: NodeKind::Destination,
+                title: "Ship v2".into(),
+                summary: None,
+                content: "wayfind v2 in daily use".into(),
+                created_at: Timestamp::parse_rfc3339("2026-08-03T00:00:00Z").unwrap(),
+                created_by: SessionId::new("s").unwrap(),
+            },
+        };
+
+        let members = members_at(&[id], &[], SnapshotOrdinal::new(1).unwrap());
+        let out = graph_document(
+            &members,
+            InitiativeId::new(1).unwrap(),
+            SnapshotOrdinal::new(1).unwrap(),
+            &[node],
+            &[],
+        );
+
+        assert!(out.contains("kind = \"graph\""));
+        assert!(out.contains("nodes = 1"));
+        assert!(out.contains("transitions = 0"));
+        assert!(out.contains(&format!("{} Ship v2", id.abbreviated())));
     }
 }
