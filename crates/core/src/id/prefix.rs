@@ -10,7 +10,8 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::error::{ErrorToken, Rejection};
-use crate::id::record::RecordKind;
+use crate::id::record::{RecordId, RecordKind};
+use crate::outcome::graph::ResolveOutcome;
 use crate::render::Field;
 
 /// The shortest prefix a caller may type: fewer hex characters than this
@@ -73,6 +74,27 @@ impl FromStr for HexPrefix {
     }
 }
 
+/// Resolve a prefix against a store's candidates.
+///
+/// A candidate of a different [`RecordKind`] never matches, even when its hex
+/// agrees — the kind letter narrows the search before the hex does.
+pub fn resolve(prefix: &HexPrefix, candidates: &[RecordId]) -> ResolveOutcome {
+    let mut matches: Vec<RecordId> = candidates
+        .iter()
+        .copied()
+        .filter(|candidate| {
+            candidate.kind() == prefix.kind && candidate.hash().to_hex().starts_with(&prefix.hex)
+        })
+        .collect();
+    matches.sort();
+
+    match matches.len() {
+        0 => ResolveOutcome::Unknown,
+        1 => ResolveOutcome::Unique(matches[0]),
+        _ => ResolveOutcome::Ambiguous(matches),
+    }
+}
+
 /// Refuse a string that is not a well-formed prefix.
 ///
 /// This is `ErrorToken::UnknownWord` on the `id` field: a short or malformed
@@ -89,7 +111,9 @@ mod tests {
 
     use std::str::FromStr;
 
-    use super::HexPrefix;
+    use super::{resolve, HexPrefix};
+    use crate::id::{Hash, RecordId, RecordKind};
+    use crate::outcome::graph::ResolveOutcome;
 
     #[test]
     fn prefix_needs_four_hex_characters() {
@@ -103,5 +127,47 @@ mod tests {
             HexPrefix::from_str("X-a3f9").is_err(),
             "unknown kind prefix"
         );
+    }
+
+    fn node(hex_prefix: &str) -> RecordId {
+        let hex = format!("{hex_prefix}{}", "0".repeat(64 - hex_prefix.len()));
+        RecordId::new(RecordKind::Node, Hash::parse_hex(&hex).unwrap())
+    }
+
+    #[test]
+    fn no_candidate_matches_is_unknown() {
+        let prefix = HexPrefix::from_str("R-a3f9").unwrap();
+        let candidates = vec![node("b7000000")];
+        assert_eq!(resolve(&prefix, &candidates), ResolveOutcome::Unknown);
+    }
+
+    #[test]
+    fn one_candidate_matches_is_unique() {
+        let prefix = HexPrefix::from_str("R-a3f9").unwrap();
+        let only = node("a3f90000");
+        let candidates = vec![node("b7000000"), only];
+        assert_eq!(resolve(&prefix, &candidates), ResolveOutcome::Unique(only));
+    }
+
+    #[test]
+    fn two_candidates_match_is_ambiguous_sorted_by_hex() {
+        let prefix = HexPrefix::from_str("R-a3f9").unwrap();
+        let higher = node("a3f9ffff");
+        let lower = node("a3f90000");
+        let candidates = vec![higher, lower];
+        assert_eq!(
+            resolve(&prefix, &candidates),
+            ResolveOutcome::Ambiguous(vec![lower, higher])
+        );
+    }
+
+    #[test]
+    fn a_different_kind_never_matches_even_when_the_hex_agrees() {
+        let prefix = HexPrefix::from_str("R-a3f9").unwrap();
+        let transition = RecordId::new(
+            RecordKind::Transition,
+            Hash::parse_hex(&format!("a3f9{}", "0".repeat(60))).unwrap(),
+        );
+        assert_eq!(resolve(&prefix, &[transition]), ResolveOutcome::Unknown);
     }
 }
