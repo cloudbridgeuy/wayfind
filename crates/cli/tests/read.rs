@@ -162,3 +162,66 @@ fn initiative_list_and_show_carry_the_same_facts_the_adapter_read() {
     assert_eq!(error_matter["kind"].as_str(), Some("error"));
     assert_eq!(error_matter["error"].as_str(), Some("not-found"));
 }
+
+#[test]
+fn snapshot_list_and_show_carry_the_root_members_and_the_full_chain_hash() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(wayfind2(home.path(), &["init"]).status.success());
+    assert!(wayfind2(
+        home.path(),
+        &[
+            "initiative",
+            "create",
+            "--name",
+            "Ship v2",
+            "--destination",
+            "wayfind v2 in daily use",
+            "--session",
+            "s",
+        ]
+    )
+    .status
+    .success());
+
+    let list = wayfind2(home.path(), &["--initiative", "1", "snapshot", "list"]);
+    assert!(list.status.success());
+    let list_matter = front_matter(&list.stdout);
+    assert_eq!(list_matter["kind"].as_str(), Some("snapshot-list"));
+    assert_eq!(list_matter["initiative"].as_integer(), Some(1));
+    assert_eq!(list_matter["count"].as_integer(), Some(1));
+    assert_eq!(list_matter["head"].as_str(), Some("S1"));
+
+    let show_head = wayfind2(
+        home.path(),
+        &["--initiative", "1", "snapshot", "show", "head"],
+    );
+    assert!(show_head.status.success());
+    let show_matter = front_matter(&show_head.stdout);
+    assert_eq!(show_matter["kind"].as_str(), Some("snapshot"));
+    assert_eq!(show_matter["initiative"].as_integer(), Some(1));
+    assert_eq!(show_matter["snapshot"].as_str(), Some("S1"));
+    assert_eq!(show_matter["chain_hash"].as_str().map(str::len), Some(64));
+    let nodes = show_matter["nodes"].as_array().unwrap();
+    assert_eq!(nodes.len(), 1);
+
+    let show_ordinal = wayfind2(
+        home.path(),
+        &["--initiative", "1", "snapshot", "show", "S1"],
+    );
+    assert!(show_ordinal.status.success());
+    assert_eq!(front_matter(&show_ordinal.stdout), show_matter);
+
+    let missing = wayfind2(
+        home.path(),
+        &["--initiative", "1", "snapshot", "show", "S2"],
+    );
+    assert!(!missing.status.success());
+    let error_matter = front_matter(&missing.stderr);
+    assert_eq!(error_matter["kind"].as_str(), Some("error"));
+    assert_eq!(error_matter["error"].as_str(), Some("not-found"));
+
+    let no_initiative = wayfind2(home.path(), &["snapshot", "list"]);
+    assert!(!no_initiative.status.success());
+    let usage_matter = front_matter(&no_initiative.stderr);
+    assert_eq!(usage_matter["error"].as_str(), Some("usage"));
+}

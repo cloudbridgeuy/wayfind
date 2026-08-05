@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use wayfind_core::error::{ErrorToken, Rejection};
-use wayfind_core::id::{ProjectKey, SessionId};
+use wayfind_core::id::{InitiativeId, ProjectKey, SessionId};
 use wayfind_core::render::Field;
 use wayfind_core::time::Timestamp;
 
@@ -180,6 +180,22 @@ pub fn session_id(environment: &dyn Environment, chosen: Option<&str>) -> ShellR
     ))
 }
 
+/// Which initiative a command that does not name one directly reads.
+///
+/// There is no notion yet of a project's active initiative to fall back to, so
+/// a command that reads an initiative's graph, snapshots, or nodes needs one
+/// named explicitly, with `--initiative ID`.
+pub fn initiative_id(chosen: Option<i64>) -> ShellResult<InitiativeId> {
+    match chosen {
+        Some(value) => Ok(InitiativeId::new(value)?),
+        None => Err(ShellError::Rejected(
+            Rejection::new(ErrorToken::Usage)
+                .key("field", Field::Text("initiative".to_string()))
+                .body("An initiative is required. Pass --initiative ID."),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -190,7 +206,7 @@ mod tests {
     use wayfind_core::error::{ErrorToken, Rejection};
     use wayfind_core::time::Timestamp;
 
-    use super::{project_key, session_id, Environment};
+    use super::{initiative_id, project_key, session_id, Environment};
     use crate::error::{ShellError, ShellResult};
 
     /// The one refusal the fake world has to offer.
@@ -312,5 +328,21 @@ mod tests {
             .body_text()
             .unwrap_or_default()
             .contains("--session"));
+    }
+
+    #[test]
+    fn an_unnamed_initiative_is_refused_rather_than_guessed() {
+        let error = initiative_id(None).unwrap_err();
+        let rejection = error.rejection().expect("a rejection, not a fault");
+        assert_eq!(rejection.token(), ErrorToken::Usage);
+        assert!(rejection
+            .body_text()
+            .unwrap_or_default()
+            .contains("--initiative"));
+    }
+
+    #[test]
+    fn a_chosen_initiative_is_used_directly() {
+        assert_eq!(initiative_id(Some(3)).unwrap().get(), 3);
     }
 }

@@ -11,6 +11,7 @@ use wayfind_core::render;
 
 use crate::{
     args::{
+        graph::SnapshotCommand,
         initiative::InitiativeCommand,
         retired::{
             RetiredAttachCommand, RetiredFogCommand, RetiredScopeCommand, RetiredSessionCommand,
@@ -90,6 +91,14 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
             command: InitiativeCommand::Clear(args),
         } => Err(retired::refuse(&["initiative", "clear"], &args.rest)),
 
+        Command::Snapshot {
+            command: SnapshotCommand::List,
+        } => commands::snapshot::list(&shell, out),
+
+        Command::Snapshot {
+            command: SnapshotCommand::Show { snapshot },
+        } => commands::snapshot::show(&shell, snapshot, out),
+
         Command::Ticket(TicketArgs {
             command: Some(TicketCommand::Claim(rest)),
             ..
@@ -165,8 +174,10 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
         | Command::Initiative {
             command: InitiativeCommand::Import { .. },
         }
+        | Command::Snapshot {
+            command: SnapshotCommand::Diff { .. },
+        }
         | Command::Graph { .. }
-        | Command::Snapshot { .. }
         | Command::Node { .. }
         | Command::Transition { .. }
         | Command::Artifact { .. }
