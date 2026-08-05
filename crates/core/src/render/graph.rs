@@ -1,5 +1,5 @@
-//! The `snapshot-list` and `snapshot` documents: what `snapshot list` and
-//! `snapshot show` print.
+//! The `snapshot-list`, `snapshot`, `graph`, and `node` documents: what
+//! `snapshot list`, `snapshot show`, `graph show`, and `node show` print.
 
 use crate::derive::GraphState;
 use crate::id::{InitiativeId, SnapshotOrdinal};
@@ -145,13 +145,35 @@ pub fn graph_document(
     out
 }
 
+/// Render one result node.
+pub fn node_document(node: &ResultNode) -> String {
+    let mut out = FrontMatter::new("node")
+        .text("node", node.id.to_string())
+        .text("node_kind", node.draft.node_kind.to_string())
+        .text("title", &node.draft.title)
+        .optional_text("summary", node.draft.summary.clone())
+        .text("created", node.draft.created_at.to_string())
+        .text("created_by", node.draft.created_by.as_str())
+        .render();
+
+    out.push('\n');
+    out.push_str(&format!("# {}\n\n", node.draft.title));
+    if let Some(summary) = &node.draft.summary {
+        out.push_str(&format!("{summary}\n\n"));
+    }
+    out.push_str(&node.draft.content);
+    out.push('\n');
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use std::str::FromStr;
 
-    use super::{graph_document, snapshot_document, snapshot_list_document};
+    use super::{graph_document, node_document, snapshot_document, snapshot_list_document};
     use crate::derive::members_at;
     use crate::id::{Hash, InitiativeId, RecordId, SnapshotOrdinal};
     use crate::record::Snapshot;
@@ -231,5 +253,35 @@ mod tests {
         assert!(out.contains("nodes = 1"));
         assert!(out.contains("transitions = 0"));
         assert!(out.contains(&format!("{} Ship v2", id.abbreviated())));
+    }
+
+    #[test]
+    fn the_node_document_carries_the_full_id_the_kind_and_the_content() {
+        use crate::id::{RecordKind, SessionId};
+        use crate::kinds::NodeKind;
+        use crate::record::{NodeDraft, ResultNode};
+
+        let id = RecordId::new(RecordKind::Node, Hash::parse_hex(&"b".repeat(64)).unwrap());
+        let node = ResultNode {
+            id,
+            draft: NodeDraft {
+                node_kind: NodeKind::Destination,
+                title: "Ship v2".into(),
+                summary: Some("A short summary".into()),
+                content: "wayfind v2 in daily use".into(),
+                created_at: Timestamp::parse_rfc3339("2026-08-03T00:00:00Z").unwrap(),
+                created_by: SessionId::new("s").unwrap(),
+            },
+        };
+
+        let out = node_document(&node);
+
+        assert!(out.contains("kind = \"node\""));
+        assert!(out.contains(&format!("node = \"{id}\"")));
+        assert!(out.contains("node_kind = \"destination\""));
+        assert!(out.contains("title = \"Ship v2\""));
+        assert!(out.contains("summary = \"A short summary\""));
+        assert!(out.contains("# Ship v2"));
+        assert!(out.contains("wayfind v2 in daily use"));
     }
 }

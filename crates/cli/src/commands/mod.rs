@@ -12,6 +12,7 @@
 pub mod graph;
 pub mod init;
 pub mod initiative;
+pub mod node;
 pub mod retired;
 pub mod snapshot;
 

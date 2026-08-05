@@ -266,3 +266,98 @@ fn graph_show_lists_exactly_one_node_and_no_transition_after_one_create() {
     assert!(explicit_head.status.success());
     assert_eq!(front_matter(&explicit_head.stdout), matter);
 }
+
+fn seeded_process(home: &std::path::Path) -> String {
+    assert!(wayfind2(home, &["init"]).status.success());
+    assert!(wayfind2(
+        home,
+        &[
+            "initiative",
+            "create",
+            "--name",
+            "Ship v2",
+            "--destination",
+            "wayfind v2 in daily use",
+            "--session",
+            "s",
+        ]
+    )
+    .status
+    .success());
+
+    let show = wayfind2(home, &["initiative", "show", "1"]);
+    assert!(show.status.success());
+    let matter = front_matter(&show.stdout);
+    let destination = matter["destination_node"].as_str().unwrap().to_string();
+    destination
+        .strip_prefix("R-")
+        .expect("destination_node is an R- id")
+        .to_string()
+}
+
+#[test]
+fn node_show_finds_the_destination_node_by_a_short_prefix() {
+    let home = tempfile::tempdir().unwrap();
+    let hex = seeded_process(home.path());
+
+    let show = wayfind2(home.path(), &["node", "show", &format!("R-{}", &hex[..4])]);
+    assert!(show.status.success());
+    let matter = front_matter(&show.stdout);
+    assert_eq!(matter["kind"].as_str(), Some("node"));
+    assert_eq!(matter["node"].as_str(), Some(format!("R-{hex}").as_str()));
+    assert_eq!(matter["title"].as_str(), Some("Ship v2"));
+}
+
+#[test]
+fn node_show_is_not_found_for_an_unknown_id() {
+    let home = tempfile::tempdir().unwrap();
+    seeded_process(home.path());
+
+    let show = wayfind2(home.path(), &["node", "show", "R-ffffffff"]);
+    assert!(!show.status.success());
+    assert_eq!(show.status.code(), Some(3));
+    let matter = front_matter(&show.stderr);
+    assert_eq!(matter["error"].as_str(), Some("not-found"));
+}
+
+#[test]
+fn node_show_refuses_a_short_prefix_as_an_unknown_word() {
+    let home = tempfile::tempdir().unwrap();
+    seeded_process(home.path());
+
+    let show = wayfind2(home.path(), &["node", "show", "R-a3f"]);
+    assert!(!show.status.success());
+    assert_eq!(show.status.code(), Some(4));
+    let matter = front_matter(&show.stderr);
+    assert_eq!(matter["error"].as_str(), Some("unknown-word"));
+}
+
+#[test]
+fn node_show_is_ambiguous_when_two_nodes_share_a_prefix() {
+    let home = tempfile::tempdir().unwrap();
+    let hex = seeded_process(home.path());
+
+    let database = home.path().join("wayfind/wayfind2.sqlite");
+    let connection = Connection::open(&database).unwrap();
+    let colliding_hex = format!("{}{}", &hex[..4], "0".repeat(60));
+    connection
+        .execute(
+            "INSERT INTO result_nodes (hash, node_kind, title, summary, content, created_at, created_by) \
+             VALUES (?1, 'destination', 'A colliding node', '', 'content', '2026-08-03T00:00:00Z', 's')",
+            [&colliding_hex],
+        )
+        .unwrap();
+    drop(connection);
+
+    let show = wayfind2(home.path(), &["node", "show", &format!("R-{}", &hex[..4])]);
+    assert!(!show.status.success());
+    assert_eq!(show.status.code(), Some(3));
+    let matter = front_matter(&show.stderr);
+    assert_eq!(matter["error"].as_str(), Some("ambiguous-id"));
+    assert_eq!(
+        matter["prefix"].as_str(),
+        Some(format!("R-{}", &hex[..4]).as_str())
+    );
+    let candidates = matter["candidates"].as_array().unwrap();
+    assert_eq!(candidates.len(), 2);
+}
