@@ -7,6 +7,8 @@
 
 use clap::{Args, Subcommand, ValueEnum};
 
+use crate::args::retired::Rest;
+
 /// The `ticket` group.
 ///
 /// A bare `wayfind2 ticket ID` shows that ticket, so the commonest reading is
@@ -136,4 +138,20 @@ pub enum TicketCommand {
         #[arg(value_name = "STATUS")]
         status: Status,
     },
+
+    /// Retired: errors naming `run question claim`.
+    #[command(hide = true)]
+    Claim(Rest),
+
+    /// Retired: errors naming `run question resolve`.
+    #[command(hide = true)]
+    Resolve(Rest),
+
+    /// Retired: errors naming `run question amend`.
+    #[command(hide = true)]
+    Amend(Rest),
+
+    /// Retired: errors naming `run question block`.
+    #[command(hide = true)]
+    Block(Rest),
 }

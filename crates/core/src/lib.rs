@@ -18,6 +18,7 @@ pub mod kinds;
 pub mod outcome;
 pub mod record;
 pub mod render;
+pub mod retired;
 pub mod storage;
 pub mod time;
 pub mod validate;

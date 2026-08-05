@@ -10,8 +10,15 @@ use std::process::ExitCode;
 use wayfind_core::render;
 
 use crate::{
-    args::{initiative::InitiativeCommand, Cli, Command},
-    commands::{self, Shell},
+    args::{
+        initiative::InitiativeCommand,
+        retired::{
+            RetiredAttachCommand, RetiredFogCommand, RetiredScopeCommand, RetiredSessionCommand,
+        },
+        ticket::{TicketArgs, TicketCommand},
+        Cli, Command,
+    },
+    commands::{self, retired, Shell},
     config::{self, ConfigContext},
     context::{self, Environment},
     error::{ShellError, ShellResult},
@@ -70,6 +77,75 @@ pub fn run(cli: &Cli, environment: &dyn Environment, out: &mut dyn Output) -> Sh
                     notes,
                 },
         } => commands::initiative::create(&shell, name, destination, notes.as_deref(), out),
+
+        Command::Initiative {
+            command: InitiativeCommand::Clear(args),
+        } => Err(retired::refuse(&["initiative", "clear"], &args.rest)),
+
+        Command::Ticket(TicketArgs {
+            command: Some(TicketCommand::Claim(rest)),
+            ..
+        }) => Err(retired::refuse(&["ticket", "claim"], &rest.rest)),
+
+        Command::Ticket(TicketArgs {
+            command: Some(TicketCommand::Resolve(rest)),
+            ..
+        }) => Err(retired::refuse(&["ticket", "resolve"], &rest.rest)),
+
+        Command::Ticket(TicketArgs {
+            command: Some(TicketCommand::Amend(rest)),
+            ..
+        }) => Err(retired::refuse(&["ticket", "amend"], &rest.rest)),
+
+        Command::Ticket(TicketArgs {
+            command: Some(TicketCommand::Block(rest)),
+            ..
+        }) => Err(retired::refuse(&["ticket", "block"], &rest.rest)),
+
+        Command::Map(args) => Err(retired::refuse(&["map"], &args.rest)),
+        Command::Tree(args) => Err(retired::refuse(&["tree"], &args.rest)),
+        Command::Next(args) => Err(retired::refuse(&["next"], &args.rest)),
+        Command::Handoff(args) => Err(retired::refuse(&["handoff"], &args.rest)),
+
+        Command::Session {
+            command: RetiredSessionCommand::Resume(args),
+        } => Err(retired::refuse(&["session", "resume"], &args.rest)),
+
+        Command::Session {
+            command: RetiredSessionCommand::List(args),
+        } => Err(retired::refuse(&["session", "list"], &args.rest)),
+
+        Command::Fog {
+            command: RetiredFogCommand::Add(args),
+        } => Err(retired::refuse(&["fog", "add"], &args.rest)),
+
+        Command::Scope {
+            command: RetiredScopeCommand::Exclude(args),
+        } => Err(retired::refuse(&["scope", "exclude"], &args.rest)),
+
+        Command::Attach {
+            command: RetiredAttachCommand::Add(args),
+        } => Err(retired::refuse(&["attach", "add"], &args.rest)),
+
+        Command::Attach {
+            command: RetiredAttachCommand::Ref(args),
+        } => Err(retired::refuse(&["attach", "ref"], &args.rest)),
+
+        Command::Attach {
+            command: RetiredAttachCommand::Unref(args),
+        } => Err(retired::refuse(&["attach", "unref"], &args.rest)),
+
+        Command::Attach {
+            command: RetiredAttachCommand::List(args),
+        } => Err(retired::refuse(&["attach", "list"], &args.rest)),
+
+        Command::Attach {
+            command: RetiredAttachCommand::Show(args),
+        } => Err(retired::refuse(&["attach", "show"], &args.rest)),
+
+        Command::Attach {
+            command: RetiredAttachCommand::Rm(args),
+        } => Err(retired::refuse(&["attach", "rm"], &args.rest)),
 
         Command::Migrate { .. }
         | Command::Initiative { .. }

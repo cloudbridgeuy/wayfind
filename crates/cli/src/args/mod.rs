@@ -12,6 +12,7 @@
 
 pub mod graph;
 pub mod initiative;
+pub mod retired;
 pub mod run;
 pub mod ticket;
 pub mod work;
@@ -203,6 +204,55 @@ pub enum Command {
         /// How many records to skip first.
         #[arg(long, value_name = "N")]
         offset: Option<i64>,
+    },
+
+    /// Retired: errors naming `run map`.
+    #[command(hide = true)]
+    Map(retired::Rest),
+
+    /// Retired: errors naming `run tree`.
+    #[command(hide = true)]
+    Tree(retired::Rest),
+
+    /// Retired: errors naming `run next`.
+    #[command(hide = true)]
+    Next(retired::Rest),
+
+    /// Retired: errors naming `run handoff`.
+    #[command(hide = true)]
+    Handoff(retired::Rest),
+
+    /// Retired: v1's `session` (singular) and `sessions` collapsed into
+    /// `sessions` alone.
+    #[command(hide = true)]
+    Session {
+        /// Which one.
+        #[command(subcommand)]
+        command: retired::RetiredSessionCommand,
+    },
+
+    /// Retired: errors naming `run fog add`.
+    #[command(hide = true)]
+    Fog {
+        /// Which one.
+        #[command(subcommand)]
+        command: retired::RetiredFogCommand,
+    },
+
+    /// Retired: errors naming `run scope exclude`.
+    #[command(hide = true)]
+    Scope {
+        /// Which one.
+        #[command(subcommand)]
+        command: retired::RetiredScopeCommand,
+    },
+
+    /// Retired: errors naming `run attach ...`.
+    #[command(hide = true)]
+    Attach {
+        /// Which one.
+        #[command(subcommand)]
+        command: retired::RetiredAttachCommand,
     },
 }
 
