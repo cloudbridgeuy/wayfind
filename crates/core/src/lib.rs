@@ -11,6 +11,7 @@
 
 pub mod command;
 pub mod config;
+pub mod derive;
 pub mod encode;
 pub mod error;
 pub mod id;
