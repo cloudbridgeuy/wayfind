@@ -7,10 +7,12 @@
 
 pub mod hash;
 pub mod numeric;
+pub mod prefix;
 pub mod project;
 pub mod record;
 
 pub use hash::Hash;
 pub use numeric::{DecisionId, InitiativeId, NoteId, QuestionId, RunAttachmentId, RunId, TicketId};
+pub use prefix::HexPrefix;
 pub use project::{ProjectKey, SessionId};
 pub use record::{RecordId, RecordKind, SnapshotOrdinal};
